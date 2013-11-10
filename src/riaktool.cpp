@@ -79,7 +79,6 @@ int main(int argc, char *argv[]) {
 
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
-  iasdf
   riak::connection_pool conn(hostname, port, num_threads, num_sockets,
                              highwatermark);
 
