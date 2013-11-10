@@ -90,13 +90,12 @@ int main(int argc, char *argv[]) {
         [&](std::string response, std::error_code error) {
           std::lock_guard<std::mutex> lock{num_sent_mutex};
           ++num_sent;
-          if (response.empty() || response[0] != 10) {
-            DLOG << "Bad reply from Riak: " << response.size() << " / "
-                 << static_cast<int>(response[0]);
-          }
           if (error) {
             DLOG << "Failed: " << error.message() << " [message " << num_sent
                  << "].";
+          } else if (response.empty() || response[0] != 10) {
+            DLOG << "Bad reply from Riak: " << response.size() << " / "
+                 << static_cast<int>(response[0]);
           } else if (num_sent == 1) {
             first_response_clock = high_resolution_clock::now();
             double secs = duration_cast<milliseconds>(

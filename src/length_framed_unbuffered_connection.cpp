@@ -118,12 +118,12 @@ void length_framed_unbuffered_connection::fail(
 
 void length_framed_unbuffered_connection::fail(std::error_code error) {
   if (current_request_.on_response) {
-    io_service_.dispatch(
-        std::bind(current_request_.on_response, std::string{}, error));
+    auto callback =
+        std::bind(current_request_.on_response, std::string{}, error);
+    reset();
+    if (socket_.is_open()) socket_.close();
+    io_service_.dispatch(callback);
   }
-
-  socket_.close();
-  reset();
 }
 
 void length_framed_unbuffered_connection::reset() {
