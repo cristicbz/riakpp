@@ -120,9 +120,10 @@ void length_framed_unbuffered_connection::fail(std::error_code error) {
   if (current_request_.on_response) {
     auto callback =
         std::bind(current_request_.on_response, std::string{}, error);
+    io_service_.dispatch(callback);
+  } else {
     reset();
     if (socket_.is_open()) socket_.close();
-    io_service_.dispatch(callback);
   }
 }
 
