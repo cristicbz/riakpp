@@ -21,9 +21,6 @@ class length_framed_unbuffered_connection : public connection {
       boost::asio::io_service& io_service,
       const std::vector<boost::asio::ip::tcp::endpoint>& endpoints);
 
-  length_framed_unbuffered_connection(
-      length_framed_unbuffered_connection&& other);
-
   virtual void send_and_consume_request(request& new_request) override;
 
  private:
