@@ -18,7 +18,7 @@ class blocking_queue {
  public:
   typedef T value_type;
 
-  blocking_queue(size_t capacity) : capacity_{capacity} {
+  explicit blocking_queue(size_t capacity) : capacity_{capacity} {
     RIAKPP_CHECK_GT(capacity_, 0);
   }
 
