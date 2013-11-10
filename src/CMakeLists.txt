@@ -16,14 +16,36 @@ set(RIAK_KV_PB ${RIAK_KV_PB_SRCS} ${RIAK_KV_PB_HDRS})
 
 add_library(riak_pb_lib ${RIAK_PB} ${RIAK_KV_PB})
 
-# add_executable(
-#   riaktool
-#     riaktool.cpp
-# )
-# target_link_libraries(
-#   riaktool
-#     riak_pb_lib
-#     ${Boost_LIBRARIES}
-#     ${GLOG_LIBRARY}
-#     ${PROTOBUF_LIBRARY}
-# )
+add_library(
+  riakpp
+    blocking_queue.hpp
+    broker.hpp
+    check.cpp
+    check.hpp
+    connection.hpp
+    connection_pool.cpp
+    connection_pool.hpp
+    debug_log.cpp
+    debug_log.hpp
+    length_framed_unbuffered_connection.cpp
+    length_framed_unbuffered_connection.hpp
+    thread_pool.cpp
+    thread_pool.hpp
+)
+target_link_libraries(
+  riakpp
+    riak_pb_lib
+    ${Boost_LIBRARIES}
+    ${PROTOBUF_LIBRARY}
+)
+
+add_executable(
+  riaktool
+    riaktool.cpp
+)
+target_link_libraries(
+  riaktool
+    riakpp
+    ${Boost_LIBRARIES}
+    ${PROTOBUF_LIBRARY}
+)
