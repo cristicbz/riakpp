@@ -63,7 +63,6 @@ int main(int argc, char *argv[]) {
     return -1;
   }
 
-
   // Simple connection_pool usage:
   //   riak::connection_pool conn(hostname, port, num_threads, num_sockets,
   //                              highwatermark);
