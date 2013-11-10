@@ -16,14 +16,10 @@ namespace ip = boost::asio::ip;
 
 length_framed_unbuffered_connection::length_framed_unbuffered_connection(
     boost::asio::io_service& io_service,
-    const std::vector<boost::asio::ip::tcp::endpoint>& endpoints,
-    availability_handler availability_handler)
+    const std::vector<boost::asio::ip::tcp::endpoint>& endpoints)
     : io_service_{io_service},
       socket_{io_service},
-      endpoints_{endpoints},
-      on_available_{availability_handler} {
-  on_available_(*this);
-}
+      endpoints_{endpoints} {}
 
 void length_framed_unbuffered_connection::send_and_consume_request(
     request& new_request) {
@@ -103,7 +99,6 @@ void length_framed_unbuffered_connection::on_response(
     io_service_.dispatch(std::bind(current_request_.on_response,
                                    std::move(response_), std::error_code{}));
     reset();
-    if (on_available_) on_available_(*this);
   }
 }
 
@@ -121,7 +116,6 @@ void length_framed_unbuffered_connection::fail(std::error_code error) {
 
   socket_.close();
   reset();
-  if (on_available_) on_available_(*this);
 }
 
 void length_framed_unbuffered_connection::reset() {

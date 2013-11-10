@@ -3,9 +3,10 @@
 
 #include "connection.hpp"
 
-#include <functional>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
+
+#include <functional>
 #include <vector>
 
 namespace riak {
@@ -14,13 +15,9 @@ namespace riak {
 // TODO(cristicbz): Need better error handling.
 class length_framed_unbuffered_connection : public connection {
  public:
-  typedef std::function<void(length_framed_unbuffered_connection&)>
-      availability_handler;
-
   length_framed_unbuffered_connection(
       boost::asio::io_service& io_service,
-      const std::vector<boost::asio::ip::tcp::endpoint>& endpoints,
-      availability_handler availability_handler);
+      const std::vector<boost::asio::ip::tcp::endpoint>& endpoints);
 
   length_framed_unbuffered_connection(
       length_framed_unbuffered_connection&& other);
@@ -42,7 +39,6 @@ class length_framed_unbuffered_connection : public connection {
   boost::asio::io_service& io_service_;
   boost::asio::ip::tcp::socket socket_;
   const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
-  availability_handler on_available_;
 
   connection::request current_request_;
   uint32_t request_length_ = 0;

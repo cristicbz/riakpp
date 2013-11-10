@@ -24,15 +24,26 @@ connection_pool::connection_pool(const std::string &host, int16_t port,
       io_service_{thread_pool_.io_service()} {
   resolve(host, port);
   for (size_t i_socket = 0; i_socket < num_sockets; ++i_socket) {
-    connections_.emplace_back(new length_framed_unbuffered_connection{
-        io_service_, endpoints_,
-        std::bind(&connection_pool::add_worker_for, this, ph::_1)});
+    connections_.emplace_back(
+        new length_framed_unbuffered_connection{io_service_, endpoints_});
+    add_worker_for(*connections_.back());
   }
 }
 
 void connection_pool::add_worker_for(connection& sub_connection) {
-  broker_.add_worker(std::bind(&connection::send_and_consume_request,
-                               &sub_connection, ph::_1));
+  broker_.add_worker([this, &sub_connection](request& new_request) {
+    // Wrap the request handler: first, notify the broker the connection is
+    // ready again, then call the actual handler.
+    auto real_handler = new_request.on_response;
+    new_request.on_response = [this, &sub_connection, real_handler](
+        std::string response, std::error_code error) {
+      add_worker_for(sub_connection);  // Notify broker.
+      real_handler(response, error);   // Call real handler.
+    };
+
+    // Send the request with the wrapped handler.
+    sub_connection.send_and_consume_request(new_request);
+  });
 }
 
 void connection_pool::resolve(const std::string& host, int16_t port) {

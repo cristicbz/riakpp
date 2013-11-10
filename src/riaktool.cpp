@@ -87,7 +87,7 @@ int main(int argc, char *argv[]) {
   for (int i = 0 ; i < nmsgs ; ++ i) {
     conn.send(
         message, 1000,
-        [&](const std::string & response, std::error_code error) {
+        [&](std::string response, std::error_code error) {
           std::lock_guard<std::mutex> lock{num_sent_mutex};
           ++num_sent;
           if (num_sent == 1) {
