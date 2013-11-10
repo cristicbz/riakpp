@@ -6,7 +6,9 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <vector>
 
 namespace riak {
@@ -22,12 +24,16 @@ class length_framed_unbuffered_connection : public connection {
   length_framed_unbuffered_connection(
       length_framed_unbuffered_connection&& other);
 
+  ~length_framed_unbuffered_connection();
+
   virtual void send_and_consume_request(request& new_request) override;
 
  private:
   typedef length_framed_unbuffered_connection self_type;
 
-  void reconnect();
+  template<class Handler>
+  void reconnect(Handler on_connection, size_t endpoint_index = 0);
+
   void send_current_request();
   void wait_for_response(boost::system::error_code error, size_t);
   void wait_for_response_body(boost::system::error_code error, size_t);

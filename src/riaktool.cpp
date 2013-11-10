@@ -90,17 +90,18 @@ int main(int argc, char *argv[]) {
         [&](std::string response, std::error_code error) {
           std::lock_guard<std::mutex> lock{num_sent_mutex};
           ++num_sent;
-          if (num_sent == 1) {
+          if (error) {
+            DLOG << "Failed: " << error.message() << " [message " << num_sent
+                 << "].";
+          } else if (num_sent == 1) {
             first_response_clock = high_resolution_clock::now();
             double secs = duration_cast<milliseconds>(
                 first_response_clock - start_clock).count() / 1000.0;
             DLOG << error.message() << " [first message " << secs << " secs].";
           } else if (num_sent % log_every == 0 || num_sent == nmsgs) {
-            if (num_sent <= num_sockets) return;
             auto total = duration_cast<milliseconds>(
                 high_resolution_clock::now() - first_response_clock);
-            auto msgs_per_sec =
-                (num_sent - num_sockets) / (double(total.count()) / 1000.0);
+            auto msgs_per_sec = num_sent / (double(total.count()) / 1000.0);
             DLOG << error.message() << " [sent " << num_sent << " at "
                  << msgs_per_sec << " messages/sec]";
           }

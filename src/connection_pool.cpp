@@ -1,5 +1,6 @@
 #include "connection_pool.hpp"
 
+#include "debug_log.hpp"
 #include "length_framed_unbuffered_connection.hpp"
 
 #include <functional>
