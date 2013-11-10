@@ -10,7 +10,7 @@ namespace internal {
 
 class debug_log_stream {
  public:
-  debug_log_stream(const char* filename, const char* functio, int line);
+  debug_log_stream(const char* filename, const char* function, int line);
   ~debug_log_stream();
 
   template <class T>
