@@ -50,13 +50,13 @@ void length_framed_unbuffered_connection::reconnect(Handler on_connection,
                                                     size_t endpoint_index) {
   RIAKPP_CHECK_LT(endpoint_index, endpoints_.size());
 
-  socket_.close();
+  if (socket_.is_open()) socket_.close();
   socket_.async_connect(
       endpoints_[endpoint_index],
       [this, endpoint_index, on_connection](boost::system::error_code error) {
         if (error) {
           if (endpoint_index == endpoints_.size() - 1) {
-            socket_.close();
+            if (socket_.is_open()) socket_.close();
             fail(error);
           } else {
             reconnect(on_connection, endpoint_index + 1);
