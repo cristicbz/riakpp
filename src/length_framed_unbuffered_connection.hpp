@@ -24,8 +24,6 @@ class length_framed_unbuffered_connection : public connection {
   length_framed_unbuffered_connection(
       length_framed_unbuffered_connection&& other);
 
-  ~length_framed_unbuffered_connection();
-
   virtual void send_and_consume_request(request& new_request) override;
 
  private:

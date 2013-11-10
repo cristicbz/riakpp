@@ -7,10 +7,6 @@
 
 #include "byte_order.hpp"
 #include "check.hpp"
-#include "debug_log.hpp"
-
-#undef DLOG
-#define DLOG if (false) std::cerr
 
 namespace riak {
 
@@ -25,26 +21,17 @@ length_framed_unbuffered_connection::length_framed_unbuffered_connection(
       socket_{io_service},
       endpoints_{endpoints} {}
 
-length_framed_unbuffered_connection::~length_framed_unbuffered_connection() {
-  DLOG << "destroyed";
-}
-
 void length_framed_unbuffered_connection::send_and_consume_request(
     request& new_request) {
   current_request_ = new_request;
-  DLOG << !!current_request_.on_response;
   if (!socket_.is_open()) {
-    DLOG << "Not connected, deferring send.";
     reconnect(std::bind(&self_type::send_current_request, this));
   } else {
-    DLOG << "Connected, sending.";
     send_current_request();
   }
 }
 
 void length_framed_unbuffered_connection::send_current_request() {
-  DLOG << !!current_request_.on_response << " " << current_request_.message.size();
-  DLOG << "Sending request.";
   request_length_ = current_request_.message.size();
   request_length_ = riak::byte_order::host_to_network_long(request_length_);
   std::array<boost::asio::const_buffer, 2> buffers = {
@@ -82,8 +69,6 @@ void length_framed_unbuffered_connection::reconnect(Handler on_connection,
 
 void length_framed_unbuffered_connection::wait_for_response(
     boost::system::error_code error, size_t) {
-  DLOG << !!current_request_.on_response;
-  DLOG << "Sent request: " << error.message() << " " << this;
   std::string().swap(current_request_.message);
   if (error) {
     fail(error);
@@ -98,16 +83,13 @@ void length_framed_unbuffered_connection::wait_for_response(
 
 void length_framed_unbuffered_connection::wait_for_response_body(
     boost::system::error_code error, size_t) {
-  DLOG << !!current_request_.on_response;
   if (error) {
-    DLOG << "Received length: " << error.message() << " " << this;
     fail(error);
     return;
   }
   auto callback = std::bind(&self_type::on_response, this, ph::_1, ph::_2);
 
   response_length_ = riak::byte_order::network_to_host_long(response_length_);
-  DLOG << "Received length: " << response_length_ << " / " << error.message();
   response_.resize(response_length_);
   auto response_buffer = asio::buffer(&response_[0], response_length_);
   asio::async_read(socket_, response_buffer, callback);
@@ -115,8 +97,6 @@ void length_framed_unbuffered_connection::wait_for_response_body(
 
 void length_framed_unbuffered_connection::on_response(
     boost::system::error_code error, size_t) {
-  DLOG << !!current_request_.on_response;
-  DLOG << "Received body: " << error.message();
   if (error) {
     fail(error);
     return;
