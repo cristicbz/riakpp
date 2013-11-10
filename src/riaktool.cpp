@@ -20,12 +20,13 @@ inline const T max(T a, U b) { return a < b ? b : a; }
 
 int main(int argc, char *argv[]) {
   using namespace riak;
+  using namespace std::chrono;
   namespace po = boost::program_options;
 
   // Parse arguments
   std::string hostname;
   uint16_t port, num_threads, num_sockets, highwatermark;
-  uint32_t num_messages;
+  uint32_t nmsgs;
   po::options_description description{
     "Sends a lot of get_object requests to a Riak node using a connection pool."
   };
@@ -41,13 +42,13 @@ int main(int argc, char *argv[]) {
        po::value<uint16_t>(&num_threads)->default_value(2),
        "number of I/O threads")
       ("num-sockets,s",
-       po::value<uint16_t>(&num_sockets)->default_value(128),
+       po::value<uint16_t>(&num_sockets)->default_value(256),
        "number of sockets in pool")
-      ("highwatermark,h",
+      ("highwatermark,k",
        po::value<uint16_t>(&highwatermark)->default_value(1024),
        "max buffered requests")
       ("nmsgs,m",
-       po::value<uint32_t>(&num_messages)->default_value(1000),
+       po::value<uint32_t>(&nmsgs)->default_value(1000),
        "number of messages to send to the node");
   po::variables_map variables;
   try {
@@ -55,6 +56,7 @@ int main(int argc, char *argv[]) {
     po::notify(variables);
   } catch (const std::exception& e) {
     DLOG << e.what();
+    return -1;
   }
   if (variables.count("help")) {
     std::cerr << description << std::endl;
@@ -73,7 +75,7 @@ int main(int argc, char *argv[]) {
 
   std::mutex num_sent_mutex;
   uint32_t num_sent = 0;
-  auto start_clock = std::chrono::high_resolution_clock::now();
+  auto start_clock = high_resolution_clock::now();
   auto first_response_clock = start_clock;
   
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
@@ -82,28 +84,30 @@ int main(int argc, char *argv[]) {
                              highwatermark);
 
   DLOG << "Buffering messages...";
-  for (int i = 0 ; i < num_messages ; ++ i) {
-    conn.send(message, num_messages,
-              [&](const std::string & response, std::error_code error) {
-      std::lock_guard<std::mutex> lock{num_sent_mutex};
-      ++num_sent;
-      if (num_sent == 1) {
-        first_response_clock = std::chrono::high_resolution_clock::now();
-        DLOG << error.message() << " [first message took "
-             << (std::chrono::duration_cast<std::chrono::milliseconds>(
-                     first_response_clock - start_clock).count() /
-                 1000.0) << " secs].";
-      } else if (num_sent % max(1, num_messages / 20) == 0 ||
-                 num_sent == num_messages - 1) {
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::high_resolution_clock::now() - first_response_clock);
-        DLOG << error.message() << " [sent " << num_sent << " at "
-             << (num_sent / (double(duration.count()) / 1000.0))
-             << " messages/sec]";
-      }
+  auto log_every = max(1, nmsgs / 20);
+  for (int i = 0 ; i < nmsgs ; ++ i) {
+    conn.send(
+        message, 1000,
+        [&](const std::string & response, std::error_code error) {
+          std::lock_guard<std::mutex> lock{num_sent_mutex};
+          ++num_sent;
+          if (num_sent == 1) {
+            first_response_clock = high_resolution_clock::now();
+            double secs = duration_cast<milliseconds>(
+                first_response_clock - start_clock).count() / 1000.0;
+            DLOG << error.message() << " [first message " << secs << " secs].";
+          } else if (num_sent % log_every == 0 || num_sent == nmsgs) {
+            if (num_sent <= num_sockets) return;
+            auto total = duration_cast<milliseconds>(
+                high_resolution_clock::now() - first_response_clock);
+            auto msgs_per_sec = 
+                (num_sent - num_sockets) / (double(total.count()) / 1000.0);
+            DLOG << error.message() << " [sent " << num_sent << " at "
+                 << msgs_per_sec << " messages/sec]";
+          }
     });
-    if (i % max(1, num_messages / 20) == 0)
-      DLOG << "Buffered " << i << " messages.";
+
+    if (i % log_every == 0) DLOG << "Buffered " << i << " messages.";
   }
   DLOG << "Buffered all the messages. Waiting on signal...";
 
