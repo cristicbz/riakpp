@@ -69,16 +69,17 @@ int main(int argc, char *argv[]) {
   //   conn.send(string_message1, deadline_ms, handler);
   //   conn.send(string_message2, deadline_ms, handler);
   //   etc.
-  //   
+  //
   // What follows is a mess because this is throwaway code.
 
   std::mutex num_sent_mutex;
   uint32_t num_sent = 0;
   auto start_clock = high_resolution_clock::now();
   auto first_response_clock = start_clock;
-  
+
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
+  iasdf
   riak::connection_pool conn(hostname, port, num_threads, num_sockets,
                              highwatermark);
 
@@ -99,7 +100,7 @@ int main(int argc, char *argv[]) {
             if (num_sent <= num_sockets) return;
             auto total = duration_cast<milliseconds>(
                 high_resolution_clock::now() - first_response_clock);
-            auto msgs_per_sec = 
+            auto msgs_per_sec =
                 (num_sent - num_sockets) / (double(total.count()) / 1000.0);
             DLOG << error.message() << " [sent " << num_sent << " at "
                  << msgs_per_sec << " messages/sec]";

@@ -52,7 +52,7 @@ void broker<W>::assign_work_loop() {
   while (true) {
     if (!work_.pop(work)) break;
     if (!workers_.pop(worker)) break;
-    
+
     worker(work);
   }
 }
