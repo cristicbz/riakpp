@@ -1,8 +1,11 @@
 #ifndef RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
 #define RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
 
+#include "blocking_object.hpp"
 #include "connection.hpp"
 
+#include <boost/asio/strand.hpp>
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
@@ -11,6 +14,7 @@
 #include <mutex>
 #include <vector>
 #include <atomic>
+
 
 namespace riak {
 
@@ -35,6 +39,7 @@ class length_framed_unbuffered_connection : public connection {
   void reconnect(Handler on_connection, size_t endpoint_index = 0);
 
   void send_current_request();
+  void on_timeout(boost::system::error_code error);
   void wait_for_response(boost::system::error_code error, size_t);
   void wait_for_response_body(boost::system::error_code error, size_t);
   void on_response(boost::system::error_code error, size_t);
@@ -42,16 +47,14 @@ class length_framed_unbuffered_connection : public connection {
   void finalize_request(std::error_code code);
   bool abort_request();
 
-  bool handle_cancellation();
+  blocking_object<self_type> blocker_;
 
-  boost::asio::io_service& io_service_;
+  boost::asio::io_service::strand strand_;
   boost::asio::ip::tcp::socket socket_;
   const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
 
   std::atomic<bool> cancelled_{false};
   std::atomic<bool> has_active_request_{false};
-  std::mutex mutex_;
-  std::condition_variable on_request_finished_;
 
   connection::request current_request_;
   uint32_t request_length_ = 0;

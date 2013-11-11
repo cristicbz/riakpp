@@ -18,14 +18,14 @@ namespace ip = boost::asio::ip;
 length_framed_unbuffered_connection::length_framed_unbuffered_connection(
     asio::io_service& io_service,
     const std::vector<ip::tcp::endpoint>& endpoints)
-    : io_service_{io_service},
+    : blocker_{*this},
+      strand_{io_service},
       socket_{io_service},
       endpoints_{endpoints} {}
 
 length_framed_unbuffered_connection::~length_framed_unbuffered_connection() {
-  cancelled_ = true;
-  std::unique_lock<std::mutex> lock{mutex_};
-  while (has_active_request_) on_request_finished_.wait(lock);
+  shutdown();
+  blocker_.destroy();
 }
 
 void length_framed_unbuffered_connection::send_and_consume_request(
@@ -37,14 +37,14 @@ void length_framed_unbuffered_connection::send_and_consume_request(
   // Send the request, but first reconnect asynchrnonously if disconnected.
   current_request_ = std::move(new_request);
   if (!socket_.is_open()) {
-    reconnect(std::bind(&self_type::send_current_request, this));
+    reconnect(std::bind(&self_type::send_current_request, blocker_.new_ptr()));
   } else {
     send_current_request();
   }
 }
 
 void length_framed_unbuffered_connection::shutdown() {
-  cancelled_ = true;
+  //cancelled_ = true;
 }
 
 void length_framed_unbuffered_connection::send_current_request() {
@@ -52,7 +52,7 @@ void length_framed_unbuffered_connection::send_current_request() {
   if (abort_request()) return;
 
   request_length_ = current_request_.message.size();
-  request_length_ = riak::byte_order::host_to_network_long(request_length_);
+  request_length_ = byte_order::host_to_network_long(request_length_);
   std::array<boost::asio::const_buffer, 2> buffers = {
       {asio::const_buffer(reinterpret_cast<uint8_t*>(&request_length_), 4),
        asio::buffer(current_request_.message.data(),
@@ -60,35 +60,38 @@ void length_framed_unbuffered_connection::send_current_request() {
   auto callback =
       std::bind(&self_type::wait_for_response, this, ph::_1, ph::_2);
 
-  asio::async_write(socket_, buffers, callback);
+  asio::async_write(socket_, std::move(buffers),
+                    strand_.wrap(std::move(callback)));
 }
 
 template <class Handler>
 void length_framed_unbuffered_connection::reconnect(Handler on_connection,
                                                     size_t endpoint_index) {
-  RIAKPP_CHECK(has_active_request_);
   RIAKPP_CHECK_LT(endpoint_index, endpoints_.size());
   if (abort_request()) return;
-  socket_.async_connect(
-      endpoints_[endpoint_index],
-      [this, endpoint_index, on_connection](boost::system::error_code error) {
-        if (abort_request()) return;
-        if (error) {
-          if (endpoint_index == endpoints_.size() - 1) {
-            if (socket_.is_open()) socket_.close();
-            finalize_request(error);
-          } else {
-            reconnect(on_connection, endpoint_index + 1);
-          }
-        } else {
-          on_connection();
-        }
-      });
+
+  auto blocking_this = blocker_.new_ptr();
+  auto callback = [blocking_this, endpoint_index, on_connection](
+      boost::system::error_code error) {
+    if (blocking_this->abort_request()) return;
+    if (error) {
+      if (endpoint_index == blocking_this->endpoints_.size() - 1) {
+        blocking_this->finalize_request(error);
+      } else {
+        blocking_this->reconnect(on_connection, endpoint_index + 1);
+      }
+    } else {
+      on_connection();
+    }
+  };
+
+  if (socket_.is_open()) socket_.close();
+  socket_.async_connect(endpoints_[endpoint_index],
+                        strand_.wrap(std::move(callback)));
 }
 
 void length_framed_unbuffered_connection::wait_for_response(
     boost::system::error_code error, size_t) {
-  RIAKPP_CHECK(has_active_request_);
   if (abort_request()) return;
   if (error) {
     finalize_request(error);
@@ -98,27 +101,28 @@ void length_framed_unbuffered_connection::wait_for_response(
   std::string().swap(current_request_.message);
   auto length_buffer = asio::buffer(
       reinterpret_cast<uint8_t*>(&response_length_), sizeof(response_length_));
-  auto callback =
-      std::bind(&self_type::wait_for_response_body, this, ph::_1, ph::_2);
+  auto callback = std::bind(&self_type::wait_for_response_body,
+                            blocker_.new_ptr(), ph::_1, ph::_2);
 
-  asio::async_read(socket_, length_buffer, callback);
+  asio::async_read(socket_, length_buffer, strand_.wrap(std::move(callback)));
 }
 
 void length_framed_unbuffered_connection::wait_for_response_body(
     boost::system::error_code error, size_t) {
-  RIAKPP_CHECK(has_active_request_);
   if (abort_request()) return;
   if (error) {
     finalize_request(error);
     return;
   }
 
-  auto callback = std::bind(&self_type::on_response, this, ph::_1, ph::_2);
-  response_length_ = riak::byte_order::network_to_host_long(response_length_);
+  auto callback =
+      std::bind(&self_type::on_response, blocker_.new_ptr(), ph::_1, ph::_2);
+  response_length_ = byte_order::network_to_host_long(response_length_);
   response_.resize(response_length_);
   auto response_buffer = asio::buffer(&response_[0], response_length_);
 
-  asio::async_read(socket_, response_buffer, callback);
+  asio::async_read(socket_, std::move(response_buffer),
+                   strand_.wrap(std::move(callback)));
 }
 
 void length_framed_unbuffered_connection::on_response(
@@ -137,12 +141,11 @@ void length_framed_unbuffered_connection::finalize_request(
 void length_framed_unbuffered_connection::finalize_request(
     std::error_code error) {
   RIAKPP_CHECK(has_active_request_);
-  has_active_request_ = false;
-
   auto reset_active_state = [&] {
     current_request_.reset();
     std::string().swap(response_);
     response_length_ = request_length_ = 0;
+    has_active_request_ = false;
   };
 
   if (current_request_.on_response) {
@@ -153,18 +156,11 @@ void length_framed_unbuffered_connection::finalize_request(
   } else {
     reset_active_state();
   }
-
-  // It's very important to notify while still holding the mutex (despite
-  // usual practice): if we set the flag to false, then unlock the mutex 'this'
-  // may be destroyed before calling on_request_finished_.notify_one(), making
-  // on_request_finished_ a dangling pointer.
-  on_request_finished_.notify_one();
 }
 
 bool length_framed_unbuffered_connection::abort_request() {
   if (cancelled_) {
     has_active_request_ = false;
-    on_request_finished_.notify_one();
     return true;
   }
 
