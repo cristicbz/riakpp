@@ -10,6 +10,7 @@
 #include <functional>
 #include <mutex>
 #include <vector>
+#include <atomic>
 
 namespace riak {
 
@@ -21,7 +22,11 @@ class length_framed_unbuffered_connection : public connection {
       boost::asio::io_service& io_service,
       const std::vector<boost::asio::ip::tcp::endpoint>& endpoints);
 
+  ~length_framed_unbuffered_connection();
+
   virtual void send_and_consume_request(request& new_request) override;
+
+  virtual void shutdown() override;
 
  private:
   typedef length_framed_unbuffered_connection self_type;
@@ -33,13 +38,20 @@ class length_framed_unbuffered_connection : public connection {
   void wait_for_response(boost::system::error_code error, size_t);
   void wait_for_response_body(boost::system::error_code error, size_t);
   void on_response(boost::system::error_code error, size_t);
-  void fail(boost::system::error_code error);
-  void fail(std::error_code error);
-  void reset();
+  void finalize_request(boost::system::error_code error);
+  void finalize_request(std::error_code code);
+  bool abort_request();
+
+  bool handle_cancellation();
 
   boost::asio::io_service& io_service_;
   boost::asio::ip::tcp::socket socket_;
   const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
+
+  std::atomic<bool> cancelled_{false};
+  std::atomic<bool> has_active_request_{false};
+  std::mutex mutex_;
+  std::condition_variable on_request_finished_;
 
   connection::request current_request_;
   uint32_t request_length_ = 0;

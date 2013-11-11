@@ -37,7 +37,7 @@ class connection_pool : public connection {
 
   ~connection_pool();
 
-  virtual void send_and_consume_request(request& new_request);
+  virtual void send_and_consume_request(request& new_request) override;
 
  private:
   void resolve(const std::string& host, int16_t port);

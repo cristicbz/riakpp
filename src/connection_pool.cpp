@@ -9,11 +9,8 @@ namespace ph = std::placeholders;
 namespace ip = boost::asio::ip;
 
 connection_pool::~connection_pool() {
-  // TODO(cristicbz): This should go away once we have a cooperative way of
-  // cancelling all current requests and then waiting on them to return.
-
-  io_service_.stop();
   broker_.stop();
+  for (auto& c : connections_) c->shutdown();
   connections_.clear();
 }
 

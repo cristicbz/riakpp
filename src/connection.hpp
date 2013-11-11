@@ -32,6 +32,7 @@ class connection {
                    const response_handler& on_response);
 
   virtual void send_and_consume_request(request& request) = 0;
+  virtual void shutdown() {}
 };
 
 void connection::send(const std::string& message, int64_t deadline_ms,
