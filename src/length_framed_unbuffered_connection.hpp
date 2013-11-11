@@ -33,33 +33,32 @@ class length_framed_unbuffered_connection : public connection {
   virtual void shutdown() override;
 
  private:
+  struct active_request_state;
+
   typedef length_framed_unbuffered_connection self_type;
+  typedef std::shared_ptr<active_request_state> shared_request_state;
+  typedef boost::system::error_code asio_error;
 
-  template<class Handler>
-  void reconnect(Handler on_connection, size_t endpoint_index = 0);
+  void reconnect(shared_request_state state, size_t endpoint_index = 0);
+  void send_active_request(shared_request_state state);
+  void on_timeout(shared_request_state state, asio_error error);
+  void wait_for_response(shared_request_state, asio_error error, size_t bytes);
+  void wait_for_response_body(shared_request_state state, asio_error error,
+                              size_t bytes);
+  void on_response(shared_request_state state, asio_error error, size_t bytes);
 
-  void send_current_request();
-  void on_timeout(boost::system::error_code error);
-  void wait_for_response(boost::system::error_code error, size_t);
-  void wait_for_response_body(boost::system::error_code error, size_t);
-  void on_response(boost::system::error_code error, size_t);
-  void finalize_request(boost::system::error_code error);
-  void finalize_request(std::error_code code);
-  bool abort_request();
-
-  blocking_object<self_type> blocker_;
+  void finalize_request(shared_request_state state, asio_error error);
+  void finalize_request(shared_request_state state, std::error_code error);
+  bool handle_abort_conditions(shared_request_state state, asio_error error);
 
   boost::asio::io_service::strand strand_;
   boost::asio::ip::tcp::socket socket_;
   const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
 
-  std::atomic<bool> cancelled_{false};
   std::atomic<bool> has_active_request_{false};
+  std::weak_ptr<active_request_state> current_request_state_;
 
-  connection::request current_request_;
-  uint32_t request_length_ = 0;
-  uint32_t response_length_ = 0;
-  std::string response_;
+  blocking_object<self_type> blocker_;
 };
 
 }  // namespace riak

@@ -1,20 +1,20 @@
 #ifndef RIAKPP_BLOCKING_OBJECT_HPP_
 #define RIAKPP_BLOCKING_OBJECT_HPP_
 
+#include "check.hpp"
+
 #include <atomic>
-#include <memory>
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
-
-#include "check.hpp"
+#include <type_traits>
 
 namespace riak {
 
-template<class P>
+template <class T>
 class basic_blocking_pointer;
 
-template<class T>
+template <class T>
 class blocking_object {
  public:
   friend class basic_blocking_pointer<T>;
@@ -34,9 +34,15 @@ class blocking_object {
     }
   }
 
-  pointer new_ptr() { return pointer{*this}; }
-  const_pointer new_ptr() const { return pointer{*this}; }
-  const_pointer new_const_ptr() const { return pointer{*this}; }
+  pointer new_ptr() {
+    return pointer{*this};
+  }
+  const_pointer new_ptr() const {
+    return pointer{*this};
+  }
+  const_pointer new_const_ptr() const {
+    return pointer{*this};
+  }
 
  private:
   inline T* add_ptr();
@@ -49,19 +55,19 @@ class blocking_object {
   T* pointee_;
 };
 
-template<class T>
+template <class T>
 T* blocking_object<T>::add_ptr() {
   ++ptr_count_;
   return pointee_;
 }
 
-template<class T>
+template <class T>
 void blocking_object<T>::remove_ptr() {
   std::unique_lock<std::mutex> lock{mutex_};
   if (--ptr_count_ == 0) zero_count_.notify_all();
 }
 
-template<class T>
+template <class T>
 class basic_blocking_pointer {
  public:
   friend class blocking_object<typename std::remove_const<T>::type>;
@@ -77,7 +83,9 @@ class basic_blocking_pointer {
     other.pointee_ = nullptr;
   }
 
-  ~basic_blocking_pointer() { if (obj_) obj_->remove_ptr(); }
+  ~basic_blocking_pointer() {
+    if (obj_) obj_->remove_ptr();
+  }
 
   T& operator*() const { return *pointee_; }
   T* operator->() const { return pointee_; }
@@ -103,10 +111,10 @@ class basic_blocking_pointer {
   T* pointee_;
 };
 
-template<class T>
+template <class T>
 using blocking_ptr = typename blocking_object<T>::pointer;
 
-template<class T>
+template <class T>
 using blocking_cptr = typename blocking_object<T>::const_pointer;
 
 }  // namespace
