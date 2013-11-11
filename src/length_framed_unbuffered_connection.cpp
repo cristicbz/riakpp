@@ -55,9 +55,11 @@ void length_framed_unbuffered_connection::send_and_consume_request(
 
 void length_framed_unbuffered_connection::shutdown() {
   if (auto state = current_request_state_.lock()) {
-    state->done = true;
     auto blocking_this = blocker_.new_ptr();
-    strand_.post([blocking_this] { blocking_this->socket_.close(); });
+    strand_.post([blocking_this, state] {
+      state->done = true;
+      blocking_this->socket_.close();
+    });
   }
 }
 
@@ -147,6 +149,7 @@ void length_framed_unbuffered_connection::finalize_request(
 void length_framed_unbuffered_connection::finalize_request(
     shared_request_state state, std::error_code error) {
   RIAKPP_CHECK(current_request_state_.lock() == state);
+  if (error) socket_.close();
   has_active_request_.store(false);
   state->done.store(true);
   if (state->request.on_response) {
