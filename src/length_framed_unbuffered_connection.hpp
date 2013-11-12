@@ -9,12 +9,8 @@
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/ip/tcp.hpp>
 
-#include <condition_variable>
-#include <functional>
-#include <mutex>
 #include <vector>
 #include <atomic>
-
 
 namespace riak {
 
@@ -39,20 +35,18 @@ class length_framed_unbuffered_connection : public connection {
   typedef std::shared_ptr<active_request_state> shared_request_state;
   typedef boost::system::error_code asio_error;
 
-  void reconnect(shared_request_state state, size_t endpoint_index = 0);
-  void send_active_request(shared_request_state state);
-  void on_timeout(shared_request_state state, asio_error error);
-  void wait_for_response(shared_request_state, asio_error error, size_t bytes);
-  void wait_for_response_body(shared_request_state state, asio_error error,
-                              size_t bytes);
-  void on_response(shared_request_state state, asio_error error, size_t bytes);
+  void start_request(shared_request_state state);
+  void connect(shared_request_state state, size_t endpoint_index = 0);
+  void write_request(shared_request_state state);
+  void wait_for_length(shared_request_state, asio_error error, size_t);
+  void wait_for_content(shared_request_state state, asio_error error, size_t);
+  void report(shared_request_state state, asio_error error);
+  void report_std_error(shared_request_state state, std::error_code error);
 
-  void finalize_request(shared_request_state state, asio_error error);
-  void finalize_request(shared_request_state state, std::error_code error);
-  bool handle_abort_conditions(shared_request_state state, asio_error error);
 
   boost::asio::io_service::strand strand_;
   boost::asio::ip::tcp::socket socket_;
+  boost::asio::deadline_timer deadline_timer_;
   const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
 
   std::atomic<bool> has_active_request_{false};
