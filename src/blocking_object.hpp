@@ -28,6 +28,7 @@ class blocking_object {
 
   void destroy() {
     if (!destroyed_.exchange(true)) {
+      RIAKPP_CHECK_GT(ptr_count_, 0);
       std::unique_lock<std::mutex> lock{mutex_};
       --ptr_count_;
       while (ptr_count_ > 0) zero_count_.wait(lock);
@@ -57,7 +58,7 @@ class blocking_object {
 
 template <class T>
 T* blocking_object<T>::add_ptr() {
-  ++ptr_count_;
+  RIAKPP_CHECK_GT(ptr_count_.fetch_add(1), 0);
   return pointee_;
 }
 
