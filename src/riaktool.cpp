@@ -8,12 +8,10 @@
 #include <atomic>
 
 namespace {
-void wait_on_signal() {
-  boost::asio::io_service signal_io_service;
-  boost::asio::io_service::work work{signal_io_service};
-  boost::asio::signal_set signals(signal_io_service, SIGINT, SIGTERM);
-  signals.async_wait([&](...) { signal_io_service.stop(); });
-  signal_io_service.run();
+void wait_on_signal(boost::asio::io_service& service) {
+  boost::asio::signal_set signals(service, SIGINT, SIGTERM);
+  signals.async_wait([&](...) { DLOG << "Signal caught."; service.stop(); });
+  service.run();
 }
 
 template<class T, class U>
@@ -89,43 +87,50 @@ int main(int argc, char *argv[]) {
   //
   // What follows is a mess because this is throwaway code.
 
-  std::atomic<uint32_t> num_sent{0}, num_failed{0};
+  std::mutex mutex;
+  uint32_t num_sent{0}, num_failed{0};
   auto last_clock = high_resolution_clock::now();
+  boost::asio::io_service service;
 
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
   std::unique_ptr<riak::connection_pool> conn{new riak::connection_pool{
       hostname, port, num_threads, num_sockets, highwatermark}};
 
-  DLOG << "Buffering messages...";
+  DLOG << "Buffering messages... Don't Ctrl-C until done.";
   auto log_every = max(1, nmsgs / 20);
   for (int i = 0 ; i < nmsgs ; ++ i) {
-    conn->send(
-        message, deadline_ms,
-        [&, i](std::string response, std::error_code error) {
-          ++ num_sent;
-          if (error) {
-            ++num_failed;
-            DLOG << "Failed: " << error.message() << " [message " << i << "].";
-          } else if (response.empty() || response[0] != 10) {
-            DLOG << "Bad reply from Riak: " << response.size() << " / "
-                 << static_cast<int>(response[0]);
-          } else if (num_sent == 1) {
-            double secs = seconds_since(last_clock);
-            DLOG << error.message() << " [first message " << secs << " secs].";
-          } else if (num_sent % log_every == 0 || num_sent == nmsgs) {
-            auto msgs_per_sec = log_every / seconds_since(last_clock);
-            DLOG << error.message() << " [sent " << num_sent << " at "
-                 << msgs_per_sec << " messages/sec]";
-          }
+    conn->send(message, deadline_ms,
+               [&, i](std::string response, std::error_code error) {
+      std::lock_guard<std::mutex> lock{mutex};
+      ++num_sent;
+      if (num_sent == nmsgs)
+        service.post([&] {
+          DLOG << "All messages sent.";
+          service.stop();
+        });
+      if (error) {
+        ++num_failed;
+        DLOG << "Failed: " << error.message() << " [message " << i << "].";
+      } else if (response.empty() || response[0] != 10) {
+        DLOG << "Bad reply from Riak: " << response.size() << " / "
+             << static_cast<int>(response[0]);
+      } else if (num_sent == 1) {
+        double secs = seconds_since(last_clock);
+        DLOG << error.message() << " [first message " << secs << " secs].";
+      } else if (num_sent % log_every == 0 || num_sent == nmsgs) {
+        auto msgs_per_sec = log_every / seconds_since(last_clock);
+        DLOG << error.message() << " [sent " << num_sent << " at "
+             << msgs_per_sec << " messages/sec]";
+      }
     });
 
-    if (i % log_every == 0) DLOG << "Buffered " << i + 1 << " messages.";
+    if (i % (log_every * 4) == 0) DLOG << "Buffered " << i + 1 << " messages.";
   }
-  DLOG << "Buffered all the messages. Waiting on signal...";
+  DLOG << "Buffered all the messages.";
 
-  wait_on_signal();
-  DLOG << "Signal caught. Destroying connection pool.";
+  wait_on_signal(service);
+  DLOG << "Destroying connection pool and cancelling any remaining requests...";
   conn.reset();
   DLOG << "Done. " << (num_sent - num_failed) << " out of " << num_sent
        << " messages successful.";
