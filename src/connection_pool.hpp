@@ -29,7 +29,7 @@ class connection_pool : public connection {
   static constexpr size_t default_highwatermark = 1024;
 
   connection_pool(
-      const std::string& host, int16_t port,
+      const std::string& host, uint16_t port,
       size_t num_threads = default_num_threads,
       size_t num_sockets = default_num_sockets,
       size_t highwatermark = default_highwatermark);

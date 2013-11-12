@@ -89,22 +89,23 @@ int main(int argc, char *argv[]) {
   //
   // What follows is a mess because this is throwaway code.
 
-  std::atomic<uint32_t> num_sent{0};
+  std::atomic<uint32_t> num_sent{0}, num_failed{0};
   auto last_clock = high_resolution_clock::now();
 
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
-  riak::connection_pool conn(hostname, port, num_threads, num_sockets,
-                             highwatermark);
+  std::unique_ptr<riak::connection_pool> conn{new riak::connection_pool{
+      hostname, port, num_threads, num_sockets, highwatermark}};
 
   DLOG << "Buffering messages...";
   auto log_every = max(1, nmsgs / 20);
   for (int i = 0 ; i < nmsgs ; ++ i) {
-    conn.send(
+    conn->send(
         message, deadline_ms,
         [&, i](std::string response, std::error_code error) {
           ++ num_sent;
           if (error) {
+            ++num_failed;
             DLOG << "Failed: " << error.message() << " [message " << i << "].";
           } else if (response.empty() || response[0] != 10) {
             DLOG << "Bad reply from Riak: " << response.size() << " / "
@@ -124,7 +125,10 @@ int main(int argc, char *argv[]) {
   DLOG << "Buffered all the messages. Waiting on signal...";
 
   wait_on_signal();
-  DLOG << "Signal caught.";
+  DLOG << "Signal caught. Destroying connection pool.";
+  conn.reset();
+  DLOG << "Done. " << (num_sent - num_failed) << " out of " << num_sent
+       << " messages successful.";
 
   return 0;
 }

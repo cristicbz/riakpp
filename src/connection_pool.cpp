@@ -14,7 +14,7 @@ connection_pool::~connection_pool() {
   connections_.clear();
 }
 
-connection_pool::connection_pool(const std::string &host, int16_t port,
+connection_pool::connection_pool(const std::string &host, uint16_t port,
                                  size_t num_threads, size_t num_sockets,
                                  size_t highwatermark)
     : broker_{highwatermark, num_sockets}, thread_pool_{num_threads},
