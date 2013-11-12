@@ -18,6 +18,16 @@ void wait_on_signal() {
 
 template<class T, class U>
 inline const T max(T a, U b) { return a < b ? b : a; }
+
+template <class T>
+double seconds_since(T& t) {
+  using namespace std::chrono;
+  auto now = high_resolution_clock::now();
+  auto secs = duration_cast<milliseconds>(now - t).count() / 1000.0;
+  t = now;
+  return secs;
+}
+
 }  // namespace
 
 int main(int argc, char *argv[]) {
@@ -54,7 +64,7 @@ int main(int argc, char *argv[]) {
        po::value<uint32_t>(&nmsgs)->default_value(1000),
        "number of messages to send to the node")
       ("deadline,d",
-       po::value<int64_t>(&deadline_ms)->default_value(2000),
+       po::value<int64_t>(&deadline_ms)->default_value(5000),
        "Milliseconds before timing out a request. Negative for no deadline.");
 
   po::variables_map variables;
@@ -80,8 +90,7 @@ int main(int argc, char *argv[]) {
   // What follows is a mess because this is throwaway code.
 
   std::atomic<uint32_t> num_sent{0};
-  auto start_clock = high_resolution_clock::now();
-  auto first_response_clock = start_clock;
+  auto last_clock = high_resolution_clock::now();
 
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
@@ -101,14 +110,10 @@ int main(int argc, char *argv[]) {
             DLOG << "Bad reply from Riak: " << response.size() << " / "
                  << static_cast<int>(response[0]);
           } else if (num_sent == 1) {
-            first_response_clock = high_resolution_clock::now();
-            double secs = duration_cast<milliseconds>(
-                first_response_clock - start_clock).count() / 1000.0;
+            double secs = seconds_since(last_clock);
             DLOG << error.message() << " [first message " << secs << " secs].";
           } else if (num_sent % log_every == 0 || num_sent == nmsgs) {
-            auto total = duration_cast<milliseconds>(
-                high_resolution_clock::now() - first_response_clock);
-            auto msgs_per_sec = num_sent / (double(total.count()) / 1000.0);
+            auto msgs_per_sec = log_every / seconds_since(last_clock);
             DLOG << error.message() << " [sent " << num_sent << " at "
                  << msgs_per_sec << " messages/sec]";
           }
