@@ -5,6 +5,8 @@
 #include <boost/asio/signal_set.hpp>
 #include <boost/program_options.hpp>
 
+#include <atomic>
+
 namespace {
 void wait_on_signal() {
   boost::asio::io_service signal_io_service;
@@ -25,6 +27,7 @@ int main(int argc, char *argv[]) {
 
   // Parse arguments
   std::string hostname;
+  int64_t deadline_ms;
   uint16_t port, num_threads, num_sockets, highwatermark;
   uint32_t nmsgs;
   po::options_description description{
@@ -49,7 +52,11 @@ int main(int argc, char *argv[]) {
        "max buffered requests")
       ("nmsgs,m",
        po::value<uint32_t>(&nmsgs)->default_value(1000),
-       "number of messages to send to the node");
+       "number of messages to send to the node")
+      ("deadline,d",
+       po::value<int64_t>(&deadline_ms)->default_value(2000),
+       "Milliseconds before timing out a request. Negative for no deadline.");
+
   po::variables_map variables;
   try {
     po::store(po::parse_command_line(argc, argv, description), variables);
@@ -72,8 +79,7 @@ int main(int argc, char *argv[]) {
   //
   // What follows is a mess because this is throwaway code.
 
-  std::mutex num_sent_mutex;
-  uint32_t num_sent = 0;
+  std::atomic<uint32_t> num_sent{0};
   auto start_clock = high_resolution_clock::now();
   auto first_response_clock = start_clock;
 
@@ -86,13 +92,11 @@ int main(int argc, char *argv[]) {
   auto log_every = max(1, nmsgs / 20);
   for (int i = 0 ; i < nmsgs ; ++ i) {
     conn.send(
-        message, 1000,
-        [&](std::string response, std::error_code error) {
-          std::lock_guard<std::mutex> lock{num_sent_mutex};
-          ++num_sent;
+        message, deadline_ms,
+        [&, i](std::string response, std::error_code error) {
+          ++ num_sent;
           if (error) {
-            DLOG << "Failed: " << error.message() << " [message " << num_sent
-                 << "].";
+            DLOG << "Failed: " << error.message() << " [message " << i << "].";
           } else if (response.empty() || response[0] != 10) {
             DLOG << "Bad reply from Riak: " << response.size() << " / "
                  << static_cast<int>(response[0]);
@@ -110,7 +114,7 @@ int main(int argc, char *argv[]) {
           }
     });
 
-    if (i % log_every == 0) DLOG << "Buffered " << i << " messages.";
+    if (i % log_every == 0) DLOG << "Buffered " << i + 1 << " messages.";
   }
   DLOG << "Buffered all the messages. Waiting on signal...";
 
