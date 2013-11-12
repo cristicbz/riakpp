@@ -19,10 +19,8 @@ class connection {
     inline request(std::string messsage, int64_t deadline_ms,
                    response_handler on_response) noexcept;
 
-    inline void reset() noexcept;
-
     std::string message;
-    int64_t deadline_ms = -1;
+    int64_t deadline_ms = 1500;
     response_handler on_response;
   };
 
@@ -46,12 +44,6 @@ connection::request::request(std::string message, int64_t deadline_ms,
     : message{std::move(message)},
       deadline_ms{deadline_ms},
       on_response{std::move(on_response)} {}
-
-void connection::request::reset() noexcept {
-  deadline_ms = -1;
-  std::string().swap(message);
-  response_handler().swap(on_response);
-}
 
 }  // namespace riak
 
