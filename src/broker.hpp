@@ -1,7 +1,7 @@
 #ifndef RIAKPP_BROKER_HPP_
 #define RIAKPP_BROKER_HPP_
 
-#include "blocking_queue.hpp"
+#include <boost/thread/sync_bounded_queue.hpp>
 
 #include <thread>
 #include <functional>
@@ -14,20 +14,21 @@ class broker {
   typedef Work work_type;
   typedef std::function<void(Work&)> worker_function;
 
-  broker(size_t max_work, size_t max_workers);
-  ~broker();
+  inline broker(size_t max_work, size_t max_workers);
+  inline ~broker();
 
-  // TODO(cristicbz): Use try_pop to assign work immediatedly if available.
-  void add_work(work_type work) { work_.push(std::move(work)); }
-  void add_worker(worker_function worker) { workers_.push(std::move(worker)); }
+  bool closed() const { return work_.closed() || workers_.closed(); }
 
-  void stop();
+  inline void add_work(work_type work);
+  inline void add_worker(worker_function worker);
+
+  inline void close();
 
  private:
   void assign_work_loop();
 
-  blocking_queue<work_type> work_;
-  blocking_queue<worker_function> workers_;
+  boost::sync_bounded_queue<work_type> work_;
+  boost::sync_bounded_queue<worker_function> workers_;
   std::thread thread_;
 };
 
@@ -39,8 +40,8 @@ broker<W>::broker(size_t max_work, size_t max_workers)
 
 template <class W>
 broker<W>::~broker() {
-  work_.cancel();
-  workers_.cancel();
+  work_.close();
+  workers_.close();
   if (thread_.joinable()) thread_.join();
 }
 
@@ -49,17 +50,33 @@ void broker<W>::assign_work_loop() {
   work_type work;
   worker_function worker;
 
+  bool closed = false;
   while (true) {
-    if (!work_.pop(work)) break;
-    if (!workers_.pop(worker)) break;
+    work_.pull(work, closed);
+    workers_.pull(worker, closed);
+    if (closed) break;
 
     worker(work);
   }
 }
+
 template <class W>
-void broker<W>::stop() {
-  work_.cancel();
-  workers_.cancel();
+void broker<W>::add_work(work_type work) {
+  // TODO(cristicbz): Use try_pop to assign work immediatedly if available.
+  if (closed()) return;
+  work_.push(std::move(work));
+}
+
+template <class W>
+void broker<W>::add_worker(worker_function worker) {
+  if (closed()) return;
+  workers_.push(std::move(worker));
+}
+
+template <class W>
+void broker<W>::close() {
+  work_.close();
+  workers_.close();
   thread_.join();
 }
 

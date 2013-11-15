@@ -6,6 +6,7 @@
 #include <boost/program_options.hpp>
 
 #include <atomic>
+#include <mutex>
 
 namespace {
 void wait_on_signal(boost::asio::io_service& service) {

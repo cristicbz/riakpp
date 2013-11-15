@@ -9,7 +9,7 @@ namespace ph = std::placeholders;
 namespace ip = boost::asio::ip;
 
 connection_pool::~connection_pool() {
-  broker_.stop();
+  broker_.close();
   for (auto& c : connections_) c->shutdown();
   connections_.clear();
 }
