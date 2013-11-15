@@ -18,7 +18,7 @@ add_library(riak_pb_lib ${RIAK_PB} ${RIAK_KV_PB})
 
 add_library(
   riakpp
-    blocking_object.hpp
+    blocking_counter.hpp
     blocking_queue.hpp
     broker.hpp
     check.cpp

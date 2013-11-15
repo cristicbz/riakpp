@@ -26,7 +26,7 @@ class connection_pool : public connection {
 
   static constexpr size_t default_num_threads = 16;
   static constexpr size_t default_num_sockets = 16;
-  static constexpr size_t default_highwatermark = 1024;
+  static constexpr size_t default_highwatermark = 65536;
 
   connection_pool(
       const std::string& host, uint16_t port,

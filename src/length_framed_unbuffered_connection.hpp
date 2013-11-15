@@ -1,7 +1,7 @@
 #ifndef RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
 #define RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
 
-#include "blocking_object.hpp"
+#include "blocking_counter.hpp"
 #include "connection.hpp"
 
 #include <boost/asio/strand.hpp>
@@ -14,7 +14,6 @@
 
 namespace riak {
 
-// TODO(cristicbz): Deadline is currently not enforced.
 // TODO(cristicbz): Need better error handling.
 class length_framed_unbuffered_connection : public connection {
  public:
@@ -30,6 +29,7 @@ class length_framed_unbuffered_connection : public connection {
 
  private:
   struct active_request_state;
+  friend struct active_request_state;
 
   typedef length_framed_unbuffered_connection self_type;
   typedef std::shared_ptr<active_request_state> shared_request_state;
@@ -38,11 +38,10 @@ class length_framed_unbuffered_connection : public connection {
   void start_request(shared_request_state state);
   void connect(shared_request_state state, size_t endpoint_index = 0);
   void write_request(shared_request_state state);
-  void wait_for_length(shared_request_state, asio_error error, size_t);
-  void wait_for_content(shared_request_state state, asio_error error, size_t);
+  void wait_for_length(shared_request_state, asio_error error);
+  void wait_for_content(shared_request_state state, asio_error error);
   void report(shared_request_state state, asio_error error);
   void report_std_error(shared_request_state state, std::error_code error);
-
 
   boost::asio::io_service::strand strand_;
   boost::asio::ip::tcp::socket socket_;
@@ -52,7 +51,7 @@ class length_framed_unbuffered_connection : public connection {
   std::atomic<bool> has_active_request_{false};
   std::weak_ptr<active_request_state> current_request_state_;
 
-  blocking_object<self_type> blocker_;
+  blocking_counter request_counter_;
 };
 
 }  // namespace riak

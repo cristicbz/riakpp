@@ -16,10 +16,17 @@ namespace asio = boost::asio;
 namespace ip = boost::asio::ip;
 
 struct length_framed_unbuffered_connection::active_request_state {
+  active_request_state(length_framed_unbuffered_connection& connection,
+                       request& new_request)
+      : request{std::move(new_request)},
+        counter_item{connection.request_counter_} {}
+
   request request;
   std::string response;
   uint32_t request_length = 0;
   uint32_t response_length = 0;
+
+  blocking_counter::item counter_item;
   std::atomic<bool> done{false};
 };
 
@@ -29,12 +36,11 @@ length_framed_unbuffered_connection::length_framed_unbuffered_connection(
     : strand_{io_service},
       socket_{io_service},
       deadline_timer_{io_service},
-      endpoints_{endpoints},
-      blocker_{*this} {}
+      endpoints_{endpoints} {}
 
 length_framed_unbuffered_connection::~length_framed_unbuffered_connection() {
   shutdown();
-  blocker_.destroy();
+  request_counter_.wait_and_disable();
 }
 
 void length_framed_unbuffered_connection::send_and_consume_request(
@@ -43,21 +49,19 @@ void length_framed_unbuffered_connection::send_and_consume_request(
   RIAKPP_CHECK(!has_active_request_.exchange(true))
       << "Unbuffered connection called again before request completion.";
 
-  auto state = std::make_shared<active_request_state>();
-  state->request = std::move(new_request);
+  auto state = std::make_shared<active_request_state>(*this, new_request);
   current_request_state_ = state;
 
-  strand_.post(std::bind(&self_type::start_request, blocker_.new_ptr(), state));
+  strand_.post(std::bind(&self_type::start_request, this, state));
 }
 
 
 void length_framed_unbuffered_connection::shutdown() {
   if (auto state = current_request_state_.lock()) {
-    auto blocking_this = blocker_.new_ptr();
-    strand_.post([blocking_this, state] {
+    strand_.post([this, state] {
       state->done = true;
-      blocking_this->deadline_timer_.cancel();
-      if (blocking_this->socket_.is_open()) blocking_this->socket_.close();
+      deadline_timer_.cancel();
+      if (socket_.is_open()) socket_.close();
     });
   }
 }
@@ -70,11 +74,10 @@ void length_framed_unbuffered_connection::start_request(
     deadline_timer_.expires_from_now(
         boost::posix_time::milliseconds(deadline_ms));
 
-    auto blocking_this = blocker_.new_ptr();
     deadline_timer_.async_wait(strand_.wrap(
-        [blocking_this, state](asio_error error) {
+        [this, state](asio_error error) {
           if (state->done || error) return;
-          blocking_this->report_std_error(
+          report_std_error(
               std::move(state), std::make_error_code(std::errc::timed_out));
         }));
   }
@@ -91,17 +94,16 @@ void length_framed_unbuffered_connection::connect(shared_request_state state,
                                                   size_t endpoint_index) {
   RIAKPP_CHECK_LT(endpoint_index, endpoints_.size());
 
-  auto blocking_this = blocker_.new_ptr();
-  auto callback = [blocking_this, state, endpoint_index](asio_error error) {
+  auto callback = [this, state, endpoint_index](asio_error error) {
     if (state->done) return;
     if (error) {
-      if (endpoint_index == blocking_this->endpoints_.size() - 1) {
-        blocking_this->report(std::move(state), error);
+      if (endpoint_index == endpoints_.size() - 1) {
+        report(std::move(state), error);
       } else {
-        blocking_this->connect(std::move(state), endpoint_index + 1);
+        connect(std::move(state), endpoint_index + 1);
       }
     } else {
-      blocking_this->write_request(std::move(state));
+      write_request(std::move(state));
     }
   };
 
@@ -122,14 +124,13 @@ void length_framed_unbuffered_connection::write_request(
       asio::buffer(reinterpret_cast<const uint8_t*>(&length), sizeof(length)),
       asio::buffer(content.data(), content.size())}};
 
-  asio::async_write(
-      socket_, std::move(buffers),
-      strand_.wrap(std::bind(&self_type::wait_for_length, blocker_.new_ptr(),
-                             state, ph::_1, ph::_2)));
+  asio::async_write(socket_, std::move(buffers),
+                    strand_.wrap(std::bind(&self_type::wait_for_length, this,
+                                           state, ph::_1)));
 }
 
 void length_framed_unbuffered_connection::wait_for_length(
-    shared_request_state state, asio_error error, size_t /*bytes*/) {
+    shared_request_state state, asio_error error) {
   if (state->done) return;
   if (error) {
     report(state, error);
@@ -140,9 +141,8 @@ void length_framed_unbuffered_connection::wait_for_length(
   std::string().swap(state->request.message);
 
   auto& length = state->response_length;
-  auto handler =
-      std::bind(&self_type::wait_for_content, blocker_.new_ptr(),
-                std::move(state), ph::_1, ph::_2);
+  auto handler = std::bind(&self_type::wait_for_content, this, std::move(state),
+                           ph::_1);
   asio::async_read(
       socket_,
       asio::buffer(reinterpret_cast<uint8_t*>(&length), sizeof(length)),
@@ -151,7 +151,7 @@ void length_framed_unbuffered_connection::wait_for_length(
 }
 
 void length_framed_unbuffered_connection::wait_for_content(
-    shared_request_state state, asio_error error, size_t /*bytes*/) {
+    shared_request_state state, asio_error error) {
   if (state->done) return;
   if (error) {
     report(state, error);
@@ -163,8 +163,7 @@ void length_framed_unbuffered_connection::wait_for_content(
   length = byte_order::host_to_network_long(length);
   content.resize(length);
 
-  auto handler = std::bind(&self_type::report,
-                           blocker_.new_ptr(), state, ph::_1);
+  auto handler = std::bind(&self_type::report, this, state, ph::_1);
   asio::async_read(socket_, asio::buffer(&content[0], length),
                    strand_.wrap(std::move(handler)));
 }

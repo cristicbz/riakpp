@@ -36,7 +36,8 @@ int main(int argc, char *argv[]) {
   // Parse arguments
   std::string hostname;
   int64_t deadline_ms;
-  uint16_t port, num_threads, num_sockets, highwatermark;
+  uint16_t port, num_threads, num_sockets;
+  size_t highwatermark;
   uint32_t nmsgs;
   po::options_description description{
     "Sends a lot of get_object requests to a Riak node using a connection pool."
@@ -56,7 +57,7 @@ int main(int argc, char *argv[]) {
        po::value<uint16_t>(&num_sockets)->default_value(256),
        "number of sockets in pool")
       ("highwatermark,k",
-       po::value<uint16_t>(&highwatermark)->default_value(1024),
+       po::value<size_t>(&highwatermark)->default_value(65536),
        "max buffered requests")
       ("nmsgs,m",
        po::value<uint32_t>(&nmsgs)->default_value(1000),
@@ -104,11 +105,6 @@ int main(int argc, char *argv[]) {
                [&, i](std::string response, std::error_code error) {
       std::lock_guard<std::mutex> lock{mutex};
       ++num_sent;
-      if (num_sent == nmsgs)
-        service.post([&] {
-          DLOG << "All messages sent.";
-          service.stop();
-        });
       if (error) {
         ++num_failed;
         DLOG << "Failed: " << error.message() << " [message " << i << "].";
@@ -123,6 +119,12 @@ int main(int argc, char *argv[]) {
         DLOG << error.message() << " [sent " << num_sent << " at "
              << msgs_per_sec << " messages/sec]";
       }
+
+      if (num_sent == nmsgs)
+        service.post([&] {
+          DLOG << "All messages sent.";
+          service.stop();
+        });
     });
 
     if (i % (log_every * 4) == 0) DLOG << "Buffered " << i + 1 << " messages.";
