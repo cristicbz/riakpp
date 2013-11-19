@@ -29,38 +29,37 @@ package riak.pbc;
 
 import "riak.proto"; // for RpbPair
 
-
 // Message codes.
 enum RpbMessageCode {
-    RPB_ERROR_RESP = 0;
-    RPB_PING_REQ = 1;
-    RPB_PING_RESP = 2;
-    RPB_GET_CLIENT_ID_REQ = 3;
-    RPB_GET_CLIENT_ID_RESP = 4;
-    RPB_SET_CLIENT_ID_REQ = 5;
-    RPB_SET_CLIENT_ID_RESP = 6;
-    RPB_GET_SERVER_INFO_REQ = 7;
-    RPB_GET_SERVER_INFO_RESP = 8;
-    RPB_GET_REQ = 9;
-    RPB_GET_RESP = 10;
-    RPB_PUT_REQ = 11;
-    RPB_PUT_RESP = 12;
-    RPB_DEL_REQ = 13;
-    RPB_DEL_RESP = 14;
-    RPB_LIST_BUCKETS_REQ = 15;
-    RPB_LIST_BUCKETS_RESP = 16;
-    RPB_LIST_KEYS_REQ = 17;
-    RPB_LIST_KEYS_RESP = 18;
-    RPB_GET_BUCKET_REQ = 19;
-    RPB_GET_BUCKET_RESP = 20;
-    RPB_SET_BUCKET_REQ = 21;
-    RPB_SET_BUCKET_RESP = 22;
-    RPB_MAP_RED_REQ = 23;
-    RPB_MAP_RED_RESP = 24;
-    RPB_INDEX_REQ = 25;
-    RPB_INDEX_RESP = 26;
-    RPB_SEARCH_QUERY_REQ = 27;
-    RBP_SEARCH_QUERY_RESP = 28;
+    ERROR_RESP = 0;
+    PING_REQ = 1;
+    PING_RESP = 2;
+    GET_CLIENT_ID_REQ = 3;
+    GET_CLIENT_ID_RESP = 4;
+    SET_CLIENT_ID_REQ = 5;
+    SET_CLIENT_ID_RESP = 6;
+    GET_SERVER_INFO_REQ = 7;
+    GET_SERVER_INFO_RESP = 8;
+    GET_REQ = 9;
+    GET_RESP = 10;
+    PUT_REQ = 11;
+    PUT_RESP = 12;
+    DEL_REQ = 13;
+    DEL_RESP = 14;
+    LIST_BUCKETS_REQ = 15;
+    LIST_BUCKETS_RESP = 16;
+    LIST_KEYS_REQ = 17;
+    LIST_KEYS_RESP = 18;
+    GET_BUCKET_REQ = 19;
+    GET_BUCKET_RESP = 20;
+    SET_BUCKET_REQ = 21;
+    SET_BUCKET_RESP = 22;
+    MAP_RED_REQ = 23;
+    MAP_RED_RESP = 24;
+    INDEX_REQ = 25;
+    INDEX_RESP = 26;
+    SEARCH_QUERY_REQ = 27;
+    SEARCH_QUERY_RESP = 28;
 }
 
 // Get ClientId Request - no message defined, just send RpbGetClientIdReq message code
