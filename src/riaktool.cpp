@@ -100,8 +100,8 @@ int main(int argc, char *argv[]) {
       hostname, port, num_threads, num_sockets, highwatermark}};
 
   DLOG << "Buffering messages... Don't Ctrl-C until done.";
-  auto log_every = max(1, nmsgs / 20);
-  for (int i = 0 ; i < nmsgs ; ++ i) {
+  auto log_every = max(1u, nmsgs / 20u);
+  for (size_t i = 0 ; i < nmsgs ; ++ i) {
     conn->send(message, deadline_ms,
                [&, i](std::string response, std::error_code error) {
       std::lock_guard<std::mutex> lock{mutex};
