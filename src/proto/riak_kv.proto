@@ -25,11 +25,43 @@
 ** Revision: 1.4
 */
 
-// Java package specifiers
-option java_package = "com.basho.riak.protobuf";
-option java_outer_classname = "RiakKvPB";
+package riak.pbc;
 
 import "riak.proto"; // for RpbPair
+
+
+// Message codes.
+enum RpbMessageCode {
+    RPB_ERROR_RESP = 0;
+    RPB_PING_REQ = 1;
+    RPB_PING_RESP = 2;
+    RPB_GET_CLIENT_ID_REQ = 3;
+    RPB_GET_CLIENT_ID_RESP = 4;
+    RPB_SET_CLIENT_ID_REQ = 5;
+    RPB_SET_CLIENT_ID_RESP = 6;
+    RPB_GET_SERVER_INFO_REQ = 7;
+    RPB_GET_SERVER_INFO_RESP = 8;
+    RPB_GET_REQ = 9;
+    RPB_GET_RESP = 10;
+    RPB_PUT_REQ = 11;
+    RPB_PUT_RESP = 12;
+    RPB_DEL_REQ = 13;
+    RPB_DEL_RESP = 14;
+    RPB_LIST_BUCKETS_REQ = 15;
+    RPB_LIST_BUCKETS_RESP = 16;
+    RPB_LIST_KEYS_REQ = 17;
+    RPB_LIST_KEYS_RESP = 18;
+    RPB_GET_BUCKET_REQ = 19;
+    RPB_GET_BUCKET_RESP = 20;
+    RPB_SET_BUCKET_REQ = 21;
+    RPB_SET_BUCKET_RESP = 22;
+    RPB_MAP_RED_REQ = 23;
+    RPB_MAP_RED_RESP = 24;
+    RPB_INDEX_REQ = 25;
+    RPB_INDEX_RESP = 26;
+    RPB_SEARCH_QUERY_REQ = 27;
+    RBP_SEARCH_QUERY_RESP = 28;
+}
 
 // Get ClientId Request - no message defined, just send RpbGetClientIdReq message code
 message RpbGetClientIdResp {

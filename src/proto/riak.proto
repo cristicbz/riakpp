@@ -25,10 +25,7 @@
 ** Revision: 1.4
 */
 
-// Java package specifiers
-option java_package = "com.basho.riak.protobuf";
-option java_outer_classname = "RiakPB";
-
+package riak.pbc;
 
 // Error response - may be generated for any Req
 message RpbErrorResp {
