@@ -8,13 +8,14 @@
 #define RIAKPP_INTERNAL_XSTRINGIFY(x) #x
 #define RIAKPP_INTERNAL_STRINGIFY(x) RIAKPP_INTERNAL_XSTRINGIFY(x)
 
-#define RIAKPP_INTERNAL_CHECK_ERROR_STREAM(x)                 \
-  ::riak::internal::check_error_stream {                      \
+#define RIAKPP_INTERNAL_CHECK_ERROR_STREAM(x)                \
+  ::riak::internal::check_error_stream {                     \
     __FILE__ ":" RIAKPP_INTERNAL_STRINGIFY(__LINE__) ": ", x \
   }
-#define RIAKPP_CHECK(cond) \
-  if (!(cond))             \
-  RIAKPP_INTERNAL_CHECK_ERROR_STREAM(nullptr) << "Check '" #cond << "' failed"
+#define RIAKPP_CHECK(cond)            \
+  if (!(cond))                        \
+  RIAKPP_INTERNAL_CHECK_ERROR_STREAM( \
+      new std::string{"Check '" #cond "' failed"})
 
 #define RIAKPP_INTERNAL_CHECK_OP(id, op, a, b)                            \
   if (::std::string *message =                                            \
