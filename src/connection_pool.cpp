@@ -33,7 +33,7 @@ void connection_pool::add_worker_for(connection& sub_connection) {
     // ready again, then call the actual handler.
     auto real_handler = std::move(new_request.on_response);
     new_request.on_response = [this, &sub_connection, real_handler](
-        const std::string& response, std::error_code error) {
+        std::string& response, std::error_code& error) {
       add_worker_for(sub_connection);  // Notify broker.
       real_handler(response, error);   // Call real handler.
     };

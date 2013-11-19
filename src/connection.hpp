@@ -11,7 +11,7 @@ namespace riak {
 // cancel all requests then wait for them to return.
 class connection {
  public:
-  typedef std::function<void(std::string, std::error_code)>
+  typedef std::function<void(std::string&, std::error_code&)>
       response_handler;
 
   struct request {
