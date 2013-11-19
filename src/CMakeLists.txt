@@ -22,6 +22,8 @@ add_library(
     broker.hpp
     check.cpp
     check.hpp
+    client.cpp
+    client.hpp
     connection.hpp
     connection_pool.cpp
     connection_pool.hpp
