@@ -18,10 +18,10 @@ namespace ip = boost::asio::ip;
 struct length_framed_unbuffered_connection::active_request_state {
   active_request_state(length_framed_unbuffered_connection& connection,
                        request& new_request)
-      : request{std::move(new_request)},
+      : original_request{std::move(new_request)},
         counter_item{connection.request_counter_} {}
 
-  request request;
+  request original_request;
   std::string response;
   uint32_t request_length = 0;
   uint32_t response_length = 0;
@@ -52,7 +52,7 @@ void length_framed_unbuffered_connection::send_and_consume_request(
   auto state = std::make_shared<active_request_state>(*this, new_request);
   current_request_state_ = state;
 
-  strand_.post(std::bind(&self_type::start_request, this, state));
+  strand_.post(std::bind(&self_type::start_request, this, std::move(state)));
 }
 
 
@@ -69,7 +69,7 @@ void length_framed_unbuffered_connection::shutdown() {
 void length_framed_unbuffered_connection::start_request(
     shared_request_state state) {
   // Setup deadline timer if needed.
-  auto deadline_ms = state->request.deadline_ms;
+  auto deadline_ms = state->original_request.deadline_ms;
   if (deadline_ms >= 0) {
     deadline_timer_.expires_from_now(
         boost::posix_time::milliseconds(deadline_ms));
@@ -116,7 +116,7 @@ void length_framed_unbuffered_connection::write_request(
     shared_request_state state) {
   if (state->done) return;
 
-  auto& content = state->request.message;
+  auto& content = state->original_request.message;
   auto& length = state->request_length;
   length = byte_order::host_to_network_long(content.size());
 
@@ -138,7 +138,7 @@ void length_framed_unbuffered_connection::wait_for_length(
   }
 
   // Clean up memory used to store the request.
-  std::string().swap(state->request.message);
+  std::string().swap(state->original_request.message);
 
   auto& length = state->response_length;
   auto handler = std::bind(&self_type::wait_for_content, this, std::move(state),
@@ -186,8 +186,8 @@ void length_framed_unbuffered_connection::report_std_error(
   state->done.store(true);
   has_active_request_.store(false);
 
-  if (state->request.on_response) {
-    auto handler = std::bind(state->request.on_response,
+  if (state->original_request.on_response) {
+    auto handler = std::bind(std::move(state->original_request.on_response),
                              std::move(state->response), error);
     state.reset();
     handler();

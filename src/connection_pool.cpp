@@ -18,7 +18,7 @@ connection_pool::connection_pool(const std::string &host, uint16_t port,
                                  size_t num_threads, size_t num_sockets,
                                  size_t highwatermark)
     : broker_{highwatermark, num_sockets}, thread_pool_{num_threads},
-      io_service_{thread_pool_.io_service()} {
+      io_service_(thread_pool_.io_service()) {
   resolve(host, port);
   for (size_t i_socket = 0; i_socket < num_sockets; ++i_socket) {
     connections_.emplace_back(
@@ -31,9 +31,9 @@ void connection_pool::add_worker_for(connection& sub_connection) {
   broker_.add_worker([this, &sub_connection](request& new_request) {
     // Wrap the request handler: first, notify the broker the connection is
     // ready again, then call the actual handler.
-    auto real_handler = new_request.on_response;
+    auto real_handler = std::move(new_request.on_response);
     new_request.on_response = [this, &sub_connection, real_handler](
-        std::string response, std::error_code error) {
+        const std::string& response, std::error_code error) {
       add_worker_for(sub_connection);  // Notify broker.
       real_handler(response, error);   // Call real handler.
     };
