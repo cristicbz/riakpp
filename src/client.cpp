@@ -21,7 +21,7 @@ void client::parse(pbc::RpbMessageCode code, const std::string& serialized,
 
   auto proto_begin = serialized.data() + 1;
   auto proto_size = serialized.size() - 1;
-  if (!serialized.empty()) {
+  if (serialized.empty()) {
     error = std::make_error_code(std::errc::io_error);
   } else if (serialized[0] == pbc::RpbMessageCode::ERROR_RESP) {
     pbc::RpbErrorResp response;
