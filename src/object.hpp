@@ -54,6 +54,7 @@ class object {
   inline void check_valid() const;
   inline void check_no_conflict() const;
   inline void ensure_one_sibling();
+  inline void ensure_valid_content();
 
   sibling_vector siblings_;
   std::string bucket_, key_, vclock_;
@@ -136,6 +137,8 @@ void object::resolve_with_sibling(size_t sibling_index) {
   sibling_vector new_vector;
   new_vector.AddAllocated(siblings_.ReleaseLast());
   siblings_.Swap(&new_vector);
+
+  ensure_valid_content();
 }
 
 void object::resolve_with_sibling(
@@ -151,6 +154,7 @@ void object::resolve_with(const content& new_content) {
   sibling_vector new_vector;
   new_vector.Add()->CopyFrom(new_content);
   siblings_.Swap(&new_vector);
+  ensure_valid_content();
 }
 
 void object::resolve_with(content&& new_content) {
@@ -158,6 +162,7 @@ void object::resolve_with(content&& new_content) {
   sibling_vector new_vector;
   new_vector.Add()->Swap(&new_content);
   siblings_.Swap(&new_vector);
+  ensure_valid_content();
 }
 
 object& object::operator=(object&& other) {
@@ -204,7 +209,17 @@ void object::check_no_conflict() const {
 }
 
 void object::ensure_one_sibling() {
-  if (siblings_.size() == 0) *siblings_.Add()->mutable_value() = {};
+  if (siblings_.size() == 0) {
+    *siblings_.Add()->mutable_value() = {};
+  } else if (siblings_.size() == 1) {
+    ensure_valid_content();
+  }
+}
+
+void object::ensure_valid_content() {
+  if (!siblings_.Get(0).has_value()) {
+    *siblings_.Mutable(0)->mutable_value() = {};
+  }
 }
 
 }  // namespace riak

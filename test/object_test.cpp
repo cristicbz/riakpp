@@ -103,8 +103,9 @@ TEST(ObjectTest, CopyMoveAndAssign) {
 }
 
 TEST(ObjectTest, NewObject) {
-  object expected_object = make_object("b", "k", "", {"v"});
+  const object expected_object = make_object("b", "k", "", {"v"});
   object new_object{"b", "k"};
+
 
   EXPECT_EQ(new_object.siblings().size(), 1);
   ASSERT_NE(new_object, expected_object);
@@ -112,6 +113,26 @@ TEST(ObjectTest, NewObject) {
   new_object.value() = "v";
   EXPECT_EQ(new_object.siblings().size(), 1);
   EXPECT_EQ(new_object, expected_object);
+}
+
+TEST(ObjectTest, ContentAlwaysInitialized) {
+  {
+    object o{"b", "k"};
+    EXPECT_TRUE(o.raw_content().IsInitialized());
+  }
+  {
+    object::sibling_vector siblings;
+    siblings.Add();
+    siblings.Add();
+    object o{"b", "k", "", std::move(siblings)};
+    o.resolve_with_sibling(1);
+    EXPECT_TRUE(o.raw_content().IsInitialized());
+  }
+  {
+    object::sibling_vector siblings;
+    object o{"b", "k", "", std::move(siblings)};
+    EXPECT_TRUE(o.raw_content().IsInitialized());
+  }
 }
 
 TEST(ObjectTest, SiblingResolution) {
