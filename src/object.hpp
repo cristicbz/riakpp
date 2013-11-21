@@ -10,6 +10,9 @@ namespace riak {
 
 class object {
  public:
+  typedef pbc::RpbContent content;
+  typedef google::protobuf::RepeatedPtrField<content> sibling_vector;
+
   object() : valid_{false} {}
 
   inline object(std::string bucket, std::string key);
@@ -20,40 +23,52 @@ class object {
   inline object& operator=(object&& other);
   inline object& operator=(const object& other);
 
-  const std::string& bucket() const { check(); return bucket_; }
-  const std::string& key() const { check(); return key_; }
+  inline const std::string& bucket() const;
+  inline const std::string& key() const;
+  inline std::string& value();
+  inline const std::string& value() const;
+  inline content& raw_content();
+  inline const content& raw_content() const;
+  inline const content& sibling(size_t index) const;
+  inline const sibling_vector& siblings() const;
 
-  std::string& value() { check(); return *content_.mutable_value(); }
-  const std::string& value() const { check(); return content_.value(); }
+  inline void resolve_with_sibling(size_t sibling_index);
+  inline void resolve_with_sibling(sibling_vector::iterator sibling_iterator);
 
-  pbc::RpbContent& raw_content() { check(); return content_; }
-  const pbc::RpbContent& raw_content() const { check(); return content_; }
+  inline void resolve_with(const content& new_content);
+  inline void resolve_with(content&& new_content);
 
-  bool is_new() const { check(); return vclock_.empty(); }
-  bool is_valid() const { return valid_; }
+  bool valid() const { return valid_; }
+  bool preexisting() const { check_valid(); return vclock_.empty(); }
+  bool in_conflict() const { check_valid(); return siblings_.size() > 1; }
+
+  inline object(std::string bucket, std::string key, std::string vclock,
+                sibling_vector&& initial_siblings);
 
  private:
   friend class client;
 
-  inline object(std::string bucket, std::string key, std::string vclock,
-                pbc::RpbContent&& content);
+  inline void check_valid() const;
+  inline void check_no_conflict() const;
+  inline void ensure_one_sibling();
 
-  inline void check() const;
-
-  pbc::RpbContent content_;
+  sibling_vector siblings_;
   std::string bucket_, key_, vclock_;
   bool valid_ = true;
 };
 
 object::object(std::string bucket, std::string key)
-    : bucket_{std::move(bucket)}, key_{std::move(key)} {}
+    : bucket_{std::move(bucket)}, key_{std::move(key)} {
+  ensure_one_sibling();
+}
 
 object::object(object&& other)
     : bucket_{std::move(other.bucket_)},
       key_{std::move(other.key_)},
       vclock_{std::move(other.vclock_)},
       valid_{other.valid_} {
-  content_.Swap(&other.content_);
+  siblings_.Swap(&other.siblings_);
+  ensure_one_sibling();
 }
 
 object::object(const object& other)
@@ -61,15 +76,93 @@ object::object(const object& other)
       key_{other.key_},
       vclock_{other.vclock_},
       valid_{other.valid_} {
-  content_.CopyFrom(other.content_);
+  siblings_.CopyFrom(other.siblings_);
+  ensure_one_sibling();
+}
+
+const std::string& object::bucket() const {
+  check_valid();
+  return bucket_;
+}
+
+const std::string& object::key() const {
+  check_valid();
+  return key_;
+}
+
+std::string& object::value() {
+  check_no_conflict();
+  return *siblings_.Mutable(0)->mutable_value();
+}
+
+const std::string& object::value() const {
+  check_no_conflict();
+  return siblings_.Get(0).value();
+}
+
+pbc::RpbContent& object::raw_content() {
+  check_no_conflict();
+  return *siblings_.Mutable(0);
+}
+
+const pbc::RpbContent& object::raw_content() const {
+  check_no_conflict();
+  return siblings_.Get(0);
+}
+
+const object::content& object::sibling(size_t index) const {
+  check_valid();
+  RIAKPP_CHECK_LT(index, siblings_.size());
+  return siblings_.Get(index);
+}
+
+const object::sibling_vector& object::siblings() const {
+  check_valid();
+  return siblings_;
+}
+
+void object::resolve_with_sibling(size_t sibling_index) {
+  check_valid();
+  RIAKPP_CHECK_LT(sibling_index, siblings_.size());
+
+  // Swap the desired sibling with the last one.
+  std::swap(*(siblings_.pointer_begin() + sibling_index),
+            *(siblings_.pointer_end() - 1));
+
+  // Create a clean RepeatedPtrField containing only the desired element.
+  sibling_vector new_vector;
+  new_vector.AddAllocated(siblings_.ReleaseLast());
+  siblings_.Swap(&new_vector);
+}
+
+void object::resolve_with_sibling(sibling_vector::iterator sibling_iterator) {
+  RIAKPP_CHECK(sibling_iterator >= siblings_.begin());
+  RIAKPP_CHECK(sibling_iterator < siblings_.end());
+  resolve_with_sibling(
+      static_cast<size_t>(sibling_iterator - siblings_.begin()));
+}
+
+void object::resolve_with(const content& new_content) {
+  check_valid();
+  sibling_vector new_vector;
+  new_vector.Add()->CopyFrom(new_content);
+  siblings_.Swap(&new_vector);
+}
+
+void object::resolve_with(content&& new_content) {
+  check_valid();
+  sibling_vector new_vector;
+  new_vector.Add()->Swap(&new_content);
+  siblings_.Swap(&new_vector);
 }
 
 object& object::operator=(object&& other) {
-  content_.Swap(&other.content_);
+  siblings_.Swap(&other.siblings_);
   bucket_ = std::move(other.bucket_);
   key_ = std::move(other.key_);
   vclock_ = std::move(other.vclock_);
   valid_ = other.valid_;
+  ensure_one_sibling();
   return *this;
 }
 
@@ -78,22 +171,36 @@ object& object::operator=(const object& other) {
   key_ = other.key_;
   vclock_ = other.vclock_;
   valid_ = other.valid_;
-  content_.CopyFrom(other.content_);
+  siblings_.CopyFrom(other.siblings_);
+  ensure_one_sibling();
   return *this;
 }
 
 object::object(std::string bucket, std::string key, std::string vclock,
-               pbc::RpbContent&& content)
+               sibling_vector&& initial_siblings)
     : bucket_{std::move(bucket)},
       key_{std::move(key)},
       vclock_{std::move(vclock)} {
-  content_.Swap(&content);
+  siblings_.Swap(&initial_siblings);
+  ensure_one_sibling();
 }
 
-void object::check() const {
+void object::check_valid() const {
   RIAKPP_CHECK(valid_)
       << "Invalid/unitialised riak::object used. Maybe you forgot to "
          "check an error code in a handler?";
+}
+
+void object::check_no_conflict() const {
+  check_valid();
+  RIAKPP_CHECK(!in_conflict())
+      << "Cannot access conflicted object with bucket = '" << bucket_
+      << "' and key ='" << key_ << "'. There are " << siblings_.size()
+      << " siblings.";
+}
+
+void object::ensure_one_sibling() {
+  if (siblings_.size() == 0) siblings_.Add();
 }
 
 }  // namespace riak

@@ -1,7 +1,6 @@
 #ifndef RIAKPP_CLIENT_HPP_
 #define RIAKPP_CLIENT_HPP_
 
-#include "debug_log.hpp"
 #include "object.hpp"
 #include "riak_kv.pb.h"
 
@@ -66,7 +65,7 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
       fetched = object{std::move(bucket),
                        std::move(key),
                        std::move(*response.mutable_vclock()),
-                       std::move(*response.mutable_content(0))};
+                       std::move(*response.mutable_content())};
     }
   }
 
@@ -116,7 +115,7 @@ void client::store(riak::object object, Handler handler) const {
   request.mutable_bucket()->swap(object.bucket_);
   request.mutable_key()->swap(object.key_);
   request.mutable_vclock()->swap(object.vclock_);
-  request.mutable_content()->Swap(&object.content_);
+  request.mutable_content()->Swap(&object.raw_content());
   request.set_timeout(deadline_ms_);
   send(pbc::RpbMessageCode::PUT_REQ, request,
        std::bind(&store_wrapper<Handler>, std::move(handler), ph::_1, ph::_2));
