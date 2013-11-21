@@ -33,7 +33,8 @@ class object {
   inline const sibling_vector& siblings() const;
 
   inline void resolve_with_sibling(size_t sibling_index);
-  inline void resolve_with_sibling(sibling_vector::iterator sibling_iterator);
+  inline void resolve_with_sibling(
+      sibling_vector::const_iterator sibling_iterator);
 
   inline void resolve_with(const content& new_content);
   inline void resolve_with(content&& new_content);
@@ -41,6 +42,8 @@ class object {
   bool valid() const { return valid_; }
   bool preexisting() const { check_valid(); return vclock_.empty(); }
   bool in_conflict() const { check_valid(); return siblings_.size() > 1; }
+
+  const std::string& vclock() const { return vclock_; }
 
   inline object(std::string bucket, std::string key, std::string vclock,
                 sibling_vector&& initial_siblings);
@@ -135,7 +138,8 @@ void object::resolve_with_sibling(size_t sibling_index) {
   siblings_.Swap(&new_vector);
 }
 
-void object::resolve_with_sibling(sibling_vector::iterator sibling_iterator) {
+void object::resolve_with_sibling(
+    sibling_vector::const_iterator sibling_iterator) {
   RIAKPP_CHECK(sibling_iterator >= siblings_.begin());
   RIAKPP_CHECK(sibling_iterator < siblings_.end());
   resolve_with_sibling(
@@ -200,7 +204,7 @@ void object::check_no_conflict() const {
 }
 
 void object::ensure_one_sibling() {
-  if (siblings_.size() == 0) siblings_.Add();
+  if (siblings_.size() == 0) *siblings_.Add()->mutable_value() = {};
 }
 
 }  // namespace riak
