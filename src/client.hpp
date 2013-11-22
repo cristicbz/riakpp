@@ -15,10 +15,15 @@ class connection;
 
 class client {
  public:
+  typedef std::function<void(riak::object&)> sibling_resolver;
+
   client(const std::string& hostname, uint16_t port,
+         sibling_resolver resolver = &default_sibling_resolver,
          uint64_t deadline_ms = 3000);
 
-  client(std::unique_ptr<connection> connection, uint64_t deadline_ms = 3000);
+  client(std::unique_ptr<connection> connection,
+         sibling_resolver resolver = &default_sibling_resolver,
+         uint64_t deadline_ms = 3000);
 
   template <class Handler>
   void fetch(std::string bucket, std::string key, Handler handler) const;
@@ -30,6 +35,8 @@ class client {
   template <class Handler>
   void store(riak::object object, Handler handler) const;
 
+  static void default_sibling_resolver(riak::object& conflicted);
+
  private:
   void send(pbc::RpbMessageCode code, const google::protobuf::Message& message,
             std::function<void(std::string&, std::error_code&)> handler) const;
@@ -38,22 +45,30 @@ class client {
                     google::protobuf::Message& message, std::error_code& error);
 
   template <class Handler>
-  static void fetch_wrapper(Handler& handler, std::string& bucket,
-                            std::string& key, const std::string& serialized,
-                            std::error_code& error);
+  void fetch_wrapper(Handler& handler, std::string& bucket, std::string& key,
+                     const std::string& serialized,
+                     std::error_code& error) const;
 
   template <class Handler>
   static void store_wrapper(Handler& handler, const std::string& serialized,
                             std::error_code& error);
 
-  std::unique_ptr<connection> connection_;
+  template <class Handler>
+  static void fetch_resolution_wrapper(Handler& handler, riak::object& object,
+                                     const std::string& serialized,
+                                     std::error_code& error);
+
+
+  const std::unique_ptr<connection> connection_;
+  const sibling_resolver resolver_;
   const uint64_t deadline_ms_;
 };
 
 template <class Handler>
 void client::fetch_wrapper(Handler& handler, std::string& bucket,
                            std::string& key, const std::string& serialized,
-                           std::error_code& error) {
+                           std::error_code& error) const {
+  namespace ph = std::placeholders;
   pbc::RpbGetResp response;
   object fetched;
 
@@ -69,6 +84,21 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
     }
   }
 
+  if (fetched.in_conflict()) {
+    resolver_(fetched);
+    if (!fetched.in_conflict()) {
+      pbc::RpbPutReq put_request;
+      *put_request.mutable_bucket() = fetched.bucket();
+      *put_request.mutable_key() = fetched.key();
+      *put_request.mutable_vclock() = std::move(fetched.vclock_);
+      put_request.mutable_content()->CopyFrom(fetched.raw_content());
+      put_request.set_timeout(deadline_ms_);
+      send(pbc::RpbMessageCode::PUT_REQ, put_request,
+           std::bind(&fetch_resolution_wrapper<Handler>, std::move(handler),
+                     std::move(fetched), ph::_1, ph::_2));
+      return;
+    }
+  }
   handler(std::move(fetched), std::move(error));
 }
 
@@ -81,6 +111,20 @@ void client::store_wrapper(Handler& handler, const std::string& serialized,
 }
 
 template <class Handler>
+void client::fetch_resolution_wrapper(Handler& handler, riak::object& resolved,
+                                    const std::string& serialized,
+                                    std::error_code& error) {
+  pbc::RpbPutResp response;
+  parse(pbc::PUT_RESP, serialized, response, error);
+  if (error) {
+    resolved = {};
+  } else {
+    resolved.vclock_ = std::move(response.vclock());
+  }
+  handler(std::move(resolved), std::move(error));
+}
+
+template <class Handler>
 void client::fetch(std::string bucket, std::string key, Handler handler) const {
   namespace ph = std::placeholders;
 
@@ -90,8 +134,8 @@ void client::fetch(std::string bucket, std::string key, Handler handler) const {
   request.set_timeout(deadline_ms_);
 
   send(pbc::RpbMessageCode::GET_REQ, request,
-       std::bind(&fetch_wrapper<Handler>, std::move(handler), std::move(bucket),
-                 std::move(key), ph::_1, ph::_2));
+       std::bind(&client::fetch_wrapper<Handler>, this, std::move(handler),
+                 std::move(bucket), std::move(key), ph::_1, ph::_2));
 }
 
 template <class Handler>

@@ -8,12 +8,19 @@
 
 namespace riak {
 
-client::client(const std::string& hostname, uint16_t port, uint64_t deadline_ms)
+client::client(const std::string& hostname, uint16_t port,
+               sibling_resolver resolver, uint64_t deadline_ms)
     : connection_{new connection_pool{hostname, port}},
+      resolver_{resolver},
       deadline_ms_{deadline_ms} {}
 
-client::client(std::unique_ptr<connection> connection, uint64_t deadline_ms)
-    : connection_{std::move(connection)}, deadline_ms_{deadline_ms} {}
+client::client(std::unique_ptr<connection> connection,
+               sibling_resolver resolver, uint64_t deadline_ms)
+    : connection_{std::move(connection)},
+      resolver_{resolver},
+      deadline_ms_{deadline_ms} {}
+
+void client::default_sibling_resolver(object& conflicted) {}
 
 void client::parse(pbc::RpbMessageCode code, const std::string& serialized,
                    google::protobuf::Message& message, std::error_code& error) {

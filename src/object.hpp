@@ -25,10 +25,13 @@ class object {
 
   inline const std::string& bucket() const;
   inline const std::string& key() const;
+
   inline std::string& value();
   inline const std::string& value() const;
+
   inline content& raw_content();
   inline const content& raw_content() const;
+
   inline const content& sibling(size_t index) const;
   inline const sibling_vector& siblings() const;
 
