@@ -4,6 +4,7 @@
 #include "check.hpp"
 #include "riak_kv.pb.h"
 
+#include <chrono>
 #include <string>
 
 namespace riak {
@@ -18,16 +19,16 @@ class object {
   inline object(std::string bucket, std::string key);
 
   inline object(object&& other);
-  inline object(const object& other);
+  inline object(const object& other) = default;
 
   inline object& operator=(object&& other);
-  inline object& operator=(const object& other);
+  inline object& operator=(const object& other) = default;
 
   inline const std::string& bucket() const;
   inline const std::string& key() const;
 
-  inline std::string& value();
-  inline const std::string& value() const;
+  inline std::string& value() { return *raw_content().mutable_value(); }
+  inline const std::string& value() const { return raw_content().value(); }
 
   inline content& raw_content();
   inline const content& raw_content() const;
@@ -43,7 +44,7 @@ class object {
   inline void resolve_with(content&& new_content);
 
   bool valid() const { return valid_; }
-  bool preexisting() const { check_valid(); return vclock_.empty(); }
+  bool exists() const { check_no_conflict(); return exists_; }
   bool in_conflict() const { check_valid(); return siblings_.size() > 1; }
 
   const std::string& vclock() const { return vclock_; }
@@ -56,35 +57,26 @@ class object {
 
   inline void check_valid() const;
   inline void check_no_conflict() const;
-  inline void ensure_one_sibling();
+  inline void ensure_one_valid_sibling();
   inline void ensure_valid_content();
 
   sibling_vector siblings_;
   std::string bucket_, key_, vclock_;
-  bool valid_ = true;
+  bool valid_ = true, exists_ = false;
 };
 
 object::object(std::string bucket, std::string key)
     : bucket_{std::move(bucket)}, key_{std::move(key)} {
-  ensure_one_sibling();
+  ensure_one_valid_sibling();
 }
 
 object::object(object&& other)
     : bucket_{std::move(other.bucket_)},
       key_{std::move(other.key_)},
       vclock_{std::move(other.vclock_)},
-      valid_{other.valid_} {
+      valid_{other.valid_},
+      exists_{other.exists_} {
   siblings_.Swap(&other.siblings_);
-  ensure_one_sibling();
-}
-
-object::object(const object& other)
-    : bucket_{other.bucket_},
-      key_{other.key_},
-      vclock_{other.vclock_},
-      valid_{other.valid_} {
-  siblings_.CopyFrom(other.siblings_);
-  ensure_one_sibling();
 }
 
 const std::string& object::bucket() const {
@@ -95,16 +87,6 @@ const std::string& object::bucket() const {
 const std::string& object::key() const {
   check_valid();
   return key_;
-}
-
-std::string& object::value() {
-  check_no_conflict();
-  return *siblings_.Mutable(0)->mutable_value();
-}
-
-const std::string& object::value() const {
-  check_no_conflict();
-  return siblings_.Get(0).value();
 }
 
 pbc::RpbContent& object::raw_content() {
@@ -174,17 +156,7 @@ object& object::operator=(object&& other) {
   key_ = std::move(other.key_);
   vclock_ = std::move(other.vclock_);
   valid_ = other.valid_;
-  ensure_one_sibling();
-  return *this;
-}
-
-object& object::operator=(const object& other) {
-  bucket_ = other.bucket_;
-  key_ = other.key_;
-  vclock_ = other.vclock_;
-  valid_ = other.valid_;
-  siblings_.CopyFrom(other.siblings_);
-  ensure_one_sibling();
+  exists_ = other.exists_;
   return *this;
 }
 
@@ -194,7 +166,7 @@ object::object(std::string bucket, std::string key, std::string vclock,
       key_{std::move(key)},
       vclock_{std::move(vclock)} {
   siblings_.Swap(&initial_siblings);
-  ensure_one_sibling();
+  ensure_one_valid_sibling();
 }
 
 void object::check_valid() const {
@@ -211,17 +183,25 @@ void object::check_no_conflict() const {
       << " siblings.";
 }
 
-void object::ensure_one_sibling() {
+void object::ensure_one_valid_sibling() {
   if (siblings_.size() == 0) {
-    *siblings_.Add()->mutable_value() = {};
+    siblings_.Add();
+    *siblings_.Mutable(0)->mutable_value() = {};
+    exists_ = false;
   } else if (siblings_.size() == 1) {
     ensure_valid_content();
   }
 }
 
 void object::ensure_valid_content() {
-  if (!siblings_.Get(0).has_value()) {
-    *siblings_.Mutable(0)->mutable_value() = {};
+  RIAKPP_CHECK_EQ(siblings_.size(), 1);
+  auto& content = raw_content();
+  if (!content.has_value()) *content.mutable_value() = {};
+  if (content.deleted()) {
+    exists_ = false;
+    content.set_deleted(false);
+  } else {
+    exists_ = !vclock_.empty();
   }
 }
 

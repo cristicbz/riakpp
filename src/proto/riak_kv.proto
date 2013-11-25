@@ -144,7 +144,9 @@ message RpbDelReq {
     optional bytes type = 13;         // Bucket type, if not set we assume the 'default' type
 }
 
-// Delete response - not defined, will return a RpbDelResp on success or RpbErrorResp on failure
+// Delete response - even if not defined by riak, we'll define an empty message
+// for consistency.
+message RpbDelResp {} 
 
 // List buckets request 
 message RpbListBucketsReq {

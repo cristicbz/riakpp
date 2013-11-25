@@ -16,7 +16,10 @@ bool operator==(const object& a, const object& b) {
       return false;
     }
   }
-  return true;
+
+  if (!a.in_conflict() && a.exists() != b.exists()) return false;
+  return a.bucket() == b.bucket() && a.key() == b.key() &&
+         a.vclock() == b.vclock();
 }
 
 bool operator!=(const object &a, const object& b) { return !(a == b); }
@@ -80,7 +83,7 @@ TEST(ObjectTest, ValidityConditions) {
 
 TEST(ObjectTest, CopyMoveAndAssign) {
   const object o1 = make_object("b1", "k1", "c1", {"v11", "v12"});
-  const object o2 = make_object("b2", "k2", "c2", {"v21", "v22"});
+  const object o2 = make_object("b2", "k2", "c2", {"v21"});
 
   ASSERT_TRUE(o1.valid());
   ASSERT_TRUE(o2.valid());
@@ -100,6 +103,7 @@ TEST(ObjectTest, CopyMoveAndAssign) {
   p3 = o2;
   EXPECT_EQ(p3, o2);
   EXPECT_EQ(p4, o2);
+
 }
 
 TEST(ObjectTest, NewObject) {
@@ -213,7 +217,7 @@ TEST(ObjectDeathTest, DieIfInvalid) {
   EXPECT_DEATH({ inv.resolve_with(content); }, "");
   EXPECT_DEATH({ inv.resolve_with(std::move(content)); }, "");
   EXPECT_DEATH({ inv.in_conflict(); }, "");
-  EXPECT_DEATH({ inv.preexisting(); }, "");
+  EXPECT_DEATH({ inv.exists(); }, "");
 
   object valid{"b", "k"};
   const object cvalid{"b", "k"};
@@ -231,7 +235,7 @@ TEST(ObjectDeathTest, DieIfInvalid) {
   valid.resolve_with_sibling(valid.siblings().begin());
   valid.resolve_with(content);
   valid.resolve_with(std::move(content));
-  valid.preexisting();
+  valid.exists();
   valid.in_conflict();
 }
 

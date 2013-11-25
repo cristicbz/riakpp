@@ -35,6 +35,12 @@ class client {
   template <class Handler>
   void store(riak::object object, Handler handler) const;
 
+  template <class Handler>
+  void remove(std::string bucket, std::string key, Handler handler) const;
+
+  template <class Handler>
+  void remove(riak::object object, Handler handler) const;
+
   static void default_sibling_resolver(riak::object& conflicted);
 
  private:
@@ -58,6 +64,9 @@ class client {
                                      const std::string& serialized,
                                      std::error_code& error);
 
+  template <class Handler>
+  static void remove_wrapper(Handler& handler, const std::string& serialized,
+                             std::error_code& error);
 
   const std::unique_ptr<connection> connection_;
   const sibling_resolver resolver_;
@@ -81,24 +90,29 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
                        std::move(key),
                        std::move(*response.mutable_vclock()),
                        std::move(*response.mutable_content())};
+
+      if (fetched.in_conflict()) {
+        resolver_(fetched);
+        if (!fetched.in_conflict()) {
+          pbc::RpbPutReq put_request;
+          *put_request.mutable_bucket() = fetched.bucket();
+          *put_request.mutable_key() = fetched.key();
+          *put_request.mutable_vclock() = std::move(fetched.vclock_);
+          put_request.mutable_content()->CopyFrom(fetched.raw_content());
+          if (!fetched.exists()) {
+            put_request.mutable_content()->set_deleted(true);
+          }
+          put_request.set_timeout(deadline_ms_);
+          put_request.set_return_head(true);
+          send(pbc::RpbMessageCode::PUT_REQ, put_request,
+               std::bind(&fetch_resolution_wrapper<Handler>, std::move(handler),
+                         std::move(fetched), ph::_1, ph::_2));
+          return;
+        }
+      }
     }
   }
 
-  if (fetched.in_conflict()) {
-    resolver_(fetched);
-    if (!fetched.in_conflict()) {
-      pbc::RpbPutReq put_request;
-      *put_request.mutable_bucket() = fetched.bucket();
-      *put_request.mutable_key() = fetched.key();
-      *put_request.mutable_vclock() = std::move(fetched.vclock_);
-      put_request.mutable_content()->CopyFrom(fetched.raw_content());
-      put_request.set_timeout(deadline_ms_);
-      send(pbc::RpbMessageCode::PUT_REQ, put_request,
-           std::bind(&fetch_resolution_wrapper<Handler>, std::move(handler),
-                     std::move(fetched), ph::_1, ph::_2));
-      return;
-    }
-  }
   handler(std::move(fetched), std::move(error));
 }
 
@@ -119,7 +133,7 @@ void client::fetch_resolution_wrapper(Handler& handler, riak::object& resolved,
   if (error) {
     resolved = {};
   } else {
-    resolved.vclock_ = std::move(response.vclock());
+    resolved.vclock_ = std::move(*response.mutable_vclock());
   }
   handler(std::move(resolved), std::move(error));
 }
@@ -127,7 +141,6 @@ void client::fetch_resolution_wrapper(Handler& handler, riak::object& resolved,
 template <class Handler>
 void client::fetch(std::string bucket, std::string key, Handler handler) const {
   namespace ph = std::placeholders;
-
   pbc::RpbGetReq request;
   *request.mutable_bucket() = bucket;
   *request.mutable_key() = key;
@@ -142,7 +155,6 @@ template <class Handler>
 void client::store(std::string bucket, std::string key, std::string value,
                    Handler handler) const {
   namespace ph = std::placeholders;
-
   pbc::RpbPutReq request;
   request.mutable_bucket()->swap(bucket);
   request.mutable_key()->swap(key);
@@ -160,9 +172,42 @@ void client::store(riak::object object, Handler handler) const {
   request.mutable_key()->swap(object.key_);
   request.mutable_vclock()->swap(object.vclock_);
   request.mutable_content()->Swap(&object.raw_content());
+  request.mutable_content()->clear_deleted();
+  request.mutable_content()->clear_last_mod();
+  request.mutable_content()->clear_last_mod_usecs();
   request.set_timeout(deadline_ms_);
   send(pbc::RpbMessageCode::PUT_REQ, request,
        std::bind(&store_wrapper<Handler>, std::move(handler), ph::_1, ph::_2));
+}
+
+template <class Handler>
+void client::remove(riak::object object, Handler handler) const {
+  namespace ph = std::placeholders;
+  pbc::RpbDelReq request;
+  *request.mutable_bucket() = std::move(object.bucket_);
+  *request.mutable_key() = std::move(object.key_);
+  *request.mutable_vclock() = std::move(object.vclock_);
+  send(pbc::RpbMessageCode::DEL_REQ, request,
+       std::bind(&remove_wrapper<Handler>, std::move(handler), ph::_1, ph::_2));
+}
+
+template <class Handler>
+void client::remove(std::string bucket, std::string key,
+                    Handler handler) const {
+  namespace ph = std::placeholders;
+  pbc::RpbDelReq request;
+  *request.mutable_bucket() = std::move(bucket);
+  *request.mutable_key() = std::move(key);
+  send(pbc::RpbMessageCode::DEL_REQ, request,
+       std::bind(&remove_wrapper<Handler>, std::move(handler), ph::_1, ph::_2));
+}
+
+template <class Handler>
+void client::remove_wrapper(Handler& handler, const std::string& serialized,
+                            std::error_code& error) {
+  pbc::RpbDelResp response;
+  parse(pbc::DEL_RESP, serialized, response, error);
+  handler(std::move(error));
 }
 
 }  // namespace riak
