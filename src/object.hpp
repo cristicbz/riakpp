@@ -165,6 +165,7 @@ object::object(std::string bucket, std::string key, std::string vclock,
     : bucket_{std::move(bucket)},
       key_{std::move(key)},
       vclock_{std::move(vclock)} {
+  exists_ = !vclock_.empty();
   siblings_.Swap(&initial_siblings);
   ensure_one_valid_sibling();
 }
@@ -200,8 +201,6 @@ void object::ensure_valid_content() {
   if (content.deleted()) {
     exists_ = false;
     content.set_deleted(false);
-  } else {
-    exists_ = !vclock_.empty();
   }
 }
 

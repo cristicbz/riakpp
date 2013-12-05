@@ -28,10 +28,10 @@ std::ostream& operator<<(std::ostream& os, const object& o) {
   if (!o.valid()) return os << "<invalid-object>";
   std::stringstream ss;
   ss << "object { bucket: '" << o.bucket() << "', key: '" << o.key()
-     << "', vclock: '" << o.vclock() << "', values: [";
+     << "', exists: " << o.exists() << ", in_conflict: " << o.in_conflict()
+     << " vclock: '" << o.vclock() << "', values: [";
   for (const auto& sibling : o.siblings())
     ss << "'" << sibling.value() << "', ";
-
   return os << ss.str().substr(0, ss.str().size() - 2) << "] }";
 }
 
@@ -137,6 +137,17 @@ TEST(ObjectTest, ContentAlwaysInitialized) {
     object o{"b", "k", "", std::move(siblings)};
     EXPECT_TRUE(o.raw_content().IsInitialized());
   }
+}
+
+TEST(ObjectTest, TombstoneObject) {
+  object tombstone = make_object("b", "k", "c", {});  // has vclock but no value
+  EXPECT_FALSE(tombstone.in_conflict());
+  EXPECT_FALSE(tombstone.exists());
+
+  tombstone.resolve_with_sibling(0);
+
+  EXPECT_FALSE(tombstone.in_conflict());
+  EXPECT_FALSE(tombstone.exists());
 }
 
 TEST(ObjectTest, SiblingResolution) {
