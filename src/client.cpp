@@ -20,6 +20,8 @@ client::client(std::unique_ptr<connection> connection,
       resolver_{resolver},
       deadline_ms_{deadline_ms} {}
 
+client::~client() {}
+
 store_resolved_sibling client::pass_through_resolver(object& conflicted) {
   return store_resolved_sibling::no;
 }

@@ -30,6 +30,8 @@ class client {
          sibling_resolver resolver = &pass_through_resolver,
          uint64_t deadline_ms = 3000);
 
+  ~client();
+
   template <class Handler>
   void fetch(std::string bucket, std::string key, Handler handler) const;
 
