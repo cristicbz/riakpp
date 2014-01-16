@@ -36,7 +36,7 @@ length_framed_unbuffered_connection::length_framed_unbuffered_connection(
     : strand_{io_service},
       socket_{io_service},
       deadline_timer_{io_service},
-      endpoints_{endpoints} {}
+      endpoints_(endpoints) {}
 
 length_framed_unbuffered_connection::~length_framed_unbuffered_connection() {
   shutdown();
