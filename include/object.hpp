@@ -80,12 +80,10 @@ object::object(object&& other)
 }
 
 const std::string& object::bucket() const {
-  check_valid();
   return bucket_;
 }
 
 const std::string& object::key() const {
-  check_valid();
   return key_;
 }
 
