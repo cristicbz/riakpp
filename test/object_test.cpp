@@ -7,8 +7,10 @@
 
 namespace riak {
 bool operator==(const object& a, const object& b) {
-  if (!a.valid()) return !b.valid();
-  if (a.siblings().size() != b.siblings().size()) return false;
+  if (a.valid() != b.valid())  return false;
+  if (a.bucket() != b.bucket())  return false;
+  if (a.key() != b.key())  return false;
+  if (a.siblings().size() != b.siblings().size())  return false;
 
   for (size_t i_sibling = 0; i_sibling < a.siblings().size(); ++i_sibling) {
     if (a.sibling(i_sibling).SerializeAsString() !=
@@ -49,7 +51,8 @@ object make_object(std::string bucket, std::string key, std::string vclock,
 }
 
 TEST(ObjectTest, ValidityConditions) {
-  object o1;
+  object o1{{}, {}};
+  o1.valid(false);
   object o2 = o1;
   object o3{"b", "k"};
   o3 = o1;
@@ -67,7 +70,8 @@ TEST(ObjectTest, ValidityConditions) {
   object p1{"b", "k"};
   object p2 = make_object("b", "k", "123", {});
   object p3 = p1;
-  object p4;
+  object p4{{}, {}};
+  p4.valid(false);
   p4 = p2;
   EXPECT_TRUE(p1.valid());
   EXPECT_TRUE(p2.valid());
@@ -75,7 +79,8 @@ TEST(ObjectTest, ValidityConditions) {
   EXPECT_TRUE(p4.valid());
 
   object p5 = std::move(p1);
-  object p6;
+  object p6{{}, {}};
+  p6.valid(false);
   p6 = std::move(p2);
   EXPECT_TRUE(p5.valid());
   EXPECT_TRUE(p6.valid());
@@ -89,13 +94,13 @@ TEST(ObjectTest, CopyMoveAndAssign) {
   ASSERT_TRUE(o2.valid());
 
   object p1 = o1;
-  object p2;
+  object p2{{}, {}};
   p2 = o2;
   EXPECT_EQ(p1, o1);
   EXPECT_EQ(p2, o2);
 
   object p3 = std::move(p1);
-  object p4;
+  object p4{{}, {}};
   p4 = std::move(p2);
   EXPECT_EQ(p3, o1);
   EXPECT_EQ(p4, o2);
@@ -209,14 +214,15 @@ TEST(ObjectTest, SiblingResolution) {
 }
 
 TEST(ObjectDeathTest, DieIfInvalid) {
-  object inv;
-  const object cinv;
+  object inv{{}, {}};
+  inv.valid(false);
+  const object cinv{inv};
   object::content content;
 
   ASSERT_FALSE(inv.valid());
   ASSERT_FALSE(cinv.valid());
-  EXPECT_DEATH({ inv.bucket(); }, "");
-  EXPECT_DEATH({ inv.key(); }, "");
+  EXPECT_EQ(inv.bucket(), "");
+  EXPECT_EQ(inv.key(), "");
   EXPECT_DEATH({ inv.value(); }, "");
   EXPECT_DEATH({ cinv.value(); }, "");
   EXPECT_DEATH({ inv.raw_content(); }, "");
