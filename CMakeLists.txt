@@ -9,9 +9,9 @@ include_directories("../include/")
 
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -g -fcolor-diagnostics")
+      "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -g -fcolor-diagnostics -pthread")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -std=c++11 -Werror -g")
+  set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -std=c++11 -Werror -g -pthread")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   # using Intel C++
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -25,7 +25,6 @@ find_package(
     COMPONENTS
       program_options
       system
-      thread
     REQUIRED
 )
 
