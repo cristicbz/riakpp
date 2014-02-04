@@ -52,6 +52,7 @@ object make_object(std::string bucket, std::string key, std::string vclock,
 
 TEST(ObjectTest, ValidityConditions) {
   object o1{{}, {}};
+  EXPECT_TRUE(o1.valid());
   o1.valid(false);
   object o2 = o1;
   object o3{"b", "k"};
@@ -70,6 +71,7 @@ TEST(ObjectTest, ValidityConditions) {
   object p1{"b", "k"};
   object p2 = make_object("b", "k", "123", {});
   object p3 = p1;
+  EXPECT_TRUE(p3.valid());
   object p4{{}, {}};
   p4.valid(false);
   p4 = p2;
