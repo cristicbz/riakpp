@@ -14,8 +14,6 @@ class object {
   typedef pbc::RpbContent content;
   typedef google::protobuf::RepeatedPtrField<content> sibling_vector;
 
-  object() : valid_{false} {}
-
   inline object(std::string bucket, std::string key);
 
   inline object(object&& other);
@@ -44,6 +42,7 @@ class object {
   inline void resolve_with(content&& new_content);
 
   bool valid() const { return valid_; }
+  void valid(bool validity_) { valid_ = validity_; }
   bool exists() const { check_no_conflict(); return exists_; }
   bool in_conflict() const { check_valid(); return siblings_.size() > 1; }
 
@@ -80,12 +79,10 @@ object::object(object&& other)
 }
 
 const std::string& object::bucket() const {
-  check_valid();
   return bucket_;
 }
 
 const std::string& object::key() const {
-  check_valid();
   return key_;
 }
 

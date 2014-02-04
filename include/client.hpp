@@ -153,7 +153,7 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
                            std::error_code& error) const {
   namespace ph = std::placeholders;
   pbc::RpbGetResp response;
-  object fetched;
+  object fetched{{},{}};
 
   parse(pbc::RpbMessageCode::GET_RESP, serialized, response, error);
   if (!error) {
@@ -183,6 +183,8 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
         return;
       }
     }
+  } else {
+    fetched = object{std::move(bucket), std::move(key)};
   }
 
   handler(std::move(fetched), std::move(error));
@@ -203,9 +205,9 @@ void client::store_resolution_wrapper(Handler& handler, riak::object& resolved,
   pbc::RpbPutResp response;
   parse(pbc::PUT_RESP, serialized, response, error);
   if (error) {
-    resolved = {};
+    resolved.valid(false);
   } else if (response.vclock().empty() || response.content_size() > 1) {
-    resolved = {};
+    resolved.valid(false);
     error = std::make_error_code(std::errc::resource_unavailable_try_again);
   } else {
     resolved.vclock_ = std::move(*response.mutable_vclock());
