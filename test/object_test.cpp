@@ -71,8 +71,8 @@ TEST(ObjectTest, ValidityConditions) {
   object p1{"b", "k"};
   object p2 = make_object("b", "k", "123", {});
   object p3 = p1;
-  EXPECT_TRUE(p3.valid());
   object p4{{}, {}};
+  EXPECT_TRUE(p4.valid());
   p4.valid(false);
   p4 = p2;
   EXPECT_TRUE(p1.valid());
