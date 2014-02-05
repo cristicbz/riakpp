@@ -11,7 +11,7 @@ RUN echo "" >> /etc/apt/sources.list
 RUN echo "deb http://llvm.org/apt/saucy/ llvm-toolchain-saucy main" >> /etc/apt/sources.list
 RUN echo "deb-src http://llvm.org/apt/saucy/ llvm-toolchain-saucy main" >> /etc/apt/sources.list
 RUN apt-get update
-RUN apt-get install -y clang-3.5 git
+RUN apt-get install -y build-essential make cmake clang-3.5 git
 ENV CC clang
 ENV CXX clang++
 
