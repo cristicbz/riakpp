@@ -58,7 +58,7 @@ TEST(ObjectTest, ValidityConditions) {
   object o3{"b", "k"};
   o3 = o1;
 
-  EXPECT_FALSE(o1.valid());
+  EXPECT_TRUE(o1.valid());
   EXPECT_FALSE(o2.valid());
   EXPECT_FALSE(o3.valid());
 
