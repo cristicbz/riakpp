@@ -39,6 +39,8 @@ class connection_pool : public connection {
 
   virtual void send_and_consume_request(request& new_request) override;
 
+  thread_pool& threads() { return thread_pool_; }
+
  private:
   void resolve(const std::string& host, int16_t port);
   void add_worker_for(connection& sub_connection);
