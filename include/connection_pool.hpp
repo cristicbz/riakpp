@@ -24,7 +24,7 @@ class connection_pool : public connection {
               std::errc::address_not_available)} {}
   };
 
-  static constexpr size_t default_num_threads = 16;
+  static constexpr size_t default_num_threads = 0;
   static constexpr size_t default_num_sockets = 16;
   static constexpr size_t default_highwatermark = 65536;
 

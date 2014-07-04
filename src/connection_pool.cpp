@@ -17,7 +17,9 @@ connection_pool::~connection_pool() {
 connection_pool::connection_pool(const std::string &host, uint16_t port,
                                  size_t num_threads, size_t num_sockets,
                                  size_t highwatermark)
-    : broker_{highwatermark, num_sockets}, thread_pool_{num_threads},
+    : broker_{highwatermark, num_sockets},
+      thread_pool_{num_threads == 0 ?
+                   std::thread::hardware_concurrency() : num_threads},
       io_service_(thread_pool_.io_service()) {
   resolve(host, port);
   for (size_t i_socket = 0; i_socket < num_sockets; ++i_socket) {
