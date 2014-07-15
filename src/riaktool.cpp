@@ -6,6 +6,7 @@
 #include <boost/program_options.hpp>
 
 #include <atomic>
+#include <iostream>
 #include <mutex>
 
 namespace {
