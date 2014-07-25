@@ -11,10 +11,11 @@ namespace riak {
 
 class thread_pool {
  public:
-  static const size_t default_num_threads = 16;
+  static constexpr size_t use_hardware_threads = static_cast<size_t>(-1);
 
-  explicit thread_pool(size_t num_threads = default_num_threads);
-  virtual ~thread_pool() noexcept;
+  thread_pool(size_t num_threads = use_hardware_threads,
+              boost::asio::io_service* io_service = nullptr);
+  ~thread_pool() noexcept;
 
   boost::asio::io_service& io_service() noexcept { return io_service_; }
 
@@ -23,7 +24,8 @@ class thread_pool {
   }
 
  private:
-  boost::asio::io_service io_service_;
+  std::unique_ptr<boost::asio::io_service> io_service_ptr_;
+  boost::asio::io_service& io_service_;
   boost::asio::io_service::work work_;
   std::vector<std::thread> threads_;
 };
