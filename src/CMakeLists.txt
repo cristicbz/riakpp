@@ -10,7 +10,7 @@ add_library(
     client.cpp
     connection_pool.cpp
     debug_log.cpp
-    length_framed_unbuffered_connection.cpp
+    length_framed_connection.cpp
     thread_pool.cpp
     ${RIAK_PB} ${RIAK_KV_PB}
 )
@@ -30,6 +30,6 @@ target_link_libraries(
     ${Boost_LIBRARIES}
 )
 
-install(TARGETS riakpp 
+install(TARGETS riakpp
   LIBRARY DESTINATION lib
 )
