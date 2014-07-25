@@ -1,5 +1,5 @@
-#ifndef RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
-#define RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
+#ifndef RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
+#define RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
 
 #include "blocking_counter.hpp"
 #include "connection.hpp"
@@ -15,13 +15,13 @@
 namespace riak {
 
 // TODO(cristicbz): Need better error handling.
-class length_framed_unbuffered_connection : public connection {
+class length_framed_connection : public connection {
  public:
-  length_framed_unbuffered_connection(
+  length_framed_connection(
       boost::asio::io_service& io_service,
       const std::vector<boost::asio::ip::tcp::endpoint>& endpoints);
 
-  ~length_framed_unbuffered_connection();
+  ~length_framed_connection();
 
   virtual void send_and_consume_request(request& new_request) override;
 
@@ -31,7 +31,7 @@ class length_framed_unbuffered_connection : public connection {
   struct active_request_state;
   friend struct active_request_state;
 
-  typedef length_framed_unbuffered_connection self_type;
+  typedef length_framed_connection self_type;
   typedef std::shared_ptr<active_request_state> shared_request_state;
   typedef boost::system::error_code asio_error;
 
@@ -56,5 +56,5 @@ class length_framed_unbuffered_connection : public connection {
 
 }  // namespace riak
 
-#endif  // #ifndef RIAKPP_LENGTH_FRAMED_UNBUFFERED_CONNECTION_HPP_
+#endif  // #ifndef RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
 

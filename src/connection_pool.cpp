@@ -1,6 +1,6 @@
 #include "connection_pool.hpp"
 
-#include "length_framed_unbuffered_connection.hpp"
+#include "length_framed_connection.hpp"
 
 #include <functional>
 
@@ -22,7 +22,7 @@ connection_pool::connection_pool(const std::string &host, uint16_t port,
   resolve(host, port);
   for (size_t i_socket = 0; i_socket < num_sockets; ++i_socket) {
     connections_.emplace_back(
-        new length_framed_unbuffered_connection{io_service_, endpoints_});
+        new length_framed_connection{io_service_, endpoints_});
     add_worker_for(*connections_.back());
   }
 }

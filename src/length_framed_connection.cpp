@@ -1,4 +1,4 @@
-#include "length_framed_unbuffered_connection.hpp"
+#include "length_framed_connection.hpp"
 
 #include <array>
 
@@ -15,8 +15,8 @@ namespace ph = std::placeholders;
 namespace asio = boost::asio;
 namespace ip = boost::asio::ip;
 
-struct length_framed_unbuffered_connection::active_request_state {
-  active_request_state(length_framed_unbuffered_connection& connection,
+struct length_framed_connection::active_request_state {
+  active_request_state(length_framed_connection& connection,
                        request& new_request)
       : original_request{std::move(new_request)},
         counter_item{connection.request_counter_} {}
@@ -30,7 +30,7 @@ struct length_framed_unbuffered_connection::active_request_state {
   std::atomic<bool> done{false};
 };
 
-length_framed_unbuffered_connection::length_framed_unbuffered_connection(
+length_framed_connection::length_framed_connection(
     asio::io_service& io_service,
     const std::vector<ip::tcp::endpoint>& endpoints)
     : strand_{io_service},
@@ -38,13 +38,12 @@ length_framed_unbuffered_connection::length_framed_unbuffered_connection(
       deadline_timer_{io_service},
       endpoints_(endpoints) {}
 
-length_framed_unbuffered_connection::~length_framed_unbuffered_connection() {
+length_framed_connection::~length_framed_connection() {
   shutdown();
   request_counter_.wait_and_disable();
 }
 
-void length_framed_unbuffered_connection::send_and_consume_request(
-    request& new_request) {
+void length_framed_connection::send_and_consume_request(request& new_request) {
   // If there's another active request, kill the process.
   RIAKPP_CHECK(!has_active_request_.exchange(true))
       << "Unbuffered connection called again before request completion.";
@@ -56,7 +55,7 @@ void length_framed_unbuffered_connection::send_and_consume_request(
 }
 
 
-void length_framed_unbuffered_connection::shutdown() {
+void length_framed_connection::shutdown() {
   if (auto state = current_request_state_.lock()) {
     strand_.post([this, state] {
       state->done = true;
@@ -66,8 +65,7 @@ void length_framed_unbuffered_connection::shutdown() {
   }
 }
 
-void length_framed_unbuffered_connection::start_request(
-    shared_request_state state) {
+void length_framed_connection::start_request(shared_request_state state) {
   // Setup deadline timer if needed.
   auto deadline_ms = state->original_request.deadline_ms;
   if (deadline_ms >= 0) {
@@ -90,8 +88,8 @@ void length_framed_unbuffered_connection::start_request(
   }
 }
 
-void length_framed_unbuffered_connection::connect(shared_request_state state,
-                                                  size_t endpoint_index) {
+void length_framed_connection::connect(shared_request_state state,
+                                       size_t endpoint_index) {
   RIAKPP_CHECK_LT(endpoint_index, endpoints_.size());
 
   auto callback = [this, state, endpoint_index](asio_error error) {
@@ -113,8 +111,7 @@ void length_framed_unbuffered_connection::connect(shared_request_state state,
                         strand_.wrap(std::move(callback)));
 }
 
-void length_framed_unbuffered_connection::write_request(
-    shared_request_state state) {
+void length_framed_connection::write_request(shared_request_state state) {
   if (state->done) return;
 
   auto& content = state->original_request.message;
@@ -130,8 +127,8 @@ void length_framed_unbuffered_connection::write_request(
                                            state, ph::_1)));
 }
 
-void length_framed_unbuffered_connection::wait_for_length(
-    shared_request_state state, asio_error error) {
+void length_framed_connection::wait_for_length(shared_request_state state,
+                                               asio_error error) {
   if (state->done) return;
   if (error) {
     report(state, error);
@@ -151,8 +148,8 @@ void length_framed_unbuffered_connection::wait_for_length(
 
 }
 
-void length_framed_unbuffered_connection::wait_for_content(
-    shared_request_state state, asio_error error) {
+void length_framed_connection::wait_for_content(shared_request_state state,
+                                                asio_error error) {
   if (state->done) return;
   if (error) {
     report(state, error);
@@ -169,15 +166,15 @@ void length_framed_unbuffered_connection::wait_for_content(
                    strand_.wrap(std::move(handler)));
 }
 
-void length_framed_unbuffered_connection::report(shared_request_state state,
-                                                 asio_error error) {
+void length_framed_connection::report(shared_request_state state,
+                                      asio_error error) {
   // Convert boost::system_error to std::system_error.
   report_std_error(std::move(state),
                    std::make_error_code(static_cast<std::errc>(error.value())));
 }
 
-void length_framed_unbuffered_connection::report_std_error(
-    shared_request_state state, std::error_code error) {
+void length_framed_connection::report_std_error(shared_request_state state,
+                                                std::error_code error) {
   if (state->done) return;
   RIAKPP_CHECK(current_request_state_.lock() == state);
 
