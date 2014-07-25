@@ -1,13 +1,21 @@
 #ifndef RIAKPP_CLIENT_HPP_
 #define RIAKPP_CLIENT_HPP_
 
+#include "check.hpp"
 #include "object.hpp"
 #include "riak_kv.pb.h"
+#include "thread_pool.hpp"
 
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <system_error>
+
+namespace boost {
+namespace asio {
+class io_service;
+}  // namespace asio
+}  // namespace boost
 
 namespace riak {
 
@@ -20,17 +28,27 @@ enum class store_resolved_sibling {
 
 class client {
  public:
-  typedef std::function<store_resolved_sibling(riak::object&)> sibling_resolver;
+  static constexpr uint64_t default_deadline_ms = 3000;
+  using sibling_resolver = std::function<store_resolved_sibling(riak::object&)>;
 
   client(const std::string& hostname, uint16_t port,
          sibling_resolver resolver = &pass_through_resolver,
-         uint64_t deadline_ms = 3000);
+         uint64_t deadline_ms = default_deadline_ms,
+         size_t num_threads = thread_pool::use_hardware_threads);
+
+  client(boost::asio::io_service& io_service,
+         const std::string& hostname, uint16_t port,
+         sibling_resolver resolver = &pass_through_resolver,
+         uint64_t deadline_ms = default_deadline_ms);
 
   client(std::unique_ptr<connection> connection,
          sibling_resolver resolver = &pass_through_resolver,
-         uint64_t deadline_ms = 3000);
+         uint64_t deadline_ms = default_deadline_ms);
 
   ~client();
+
+  bool manages_io_service() const { return io_service_; }
+  inline boost::asio::io_service& io_service() const;
 
   template <class Handler>
   void fetch(std::string bucket, std::string key, Handler handler) const;
@@ -75,10 +93,17 @@ class client {
   static void remove_wrapper(Handler& handler, const std::string& serialized,
                              std::error_code& error);
 
+  const std::unique_ptr<thread_pool> threads_;
   const std::unique_ptr<connection> connection_;
+  boost::asio::io_service* const io_service_{nullptr};
   const sibling_resolver resolver_;
   const uint64_t deadline_ms_;
 };
+
+boost::asio::io_service& client::io_service() const {
+  RIAKPP_CHECK(manages_io_service());
+  return *io_service_;
+}
 
 template <class Handler>
 void client::fetch(std::string bucket, std::string key, Handler handler) const {

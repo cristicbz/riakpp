@@ -1,5 +1,6 @@
-#include "debug_log.hpp"
 #include "connection_pool.hpp"
+#include "debug_log.hpp"
+#include "thread_pool.hpp"
 
 #include <boost/asio/io_service.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -10,7 +11,8 @@
 #include <mutex>
 
 namespace {
-void wait_on_signal(boost::asio::io_service& service) {
+void wait_on_signal() {
+  boost::asio::io_service service;
   boost::asio::signal_set signals(service, SIGINT, SIGTERM);
   signals.async_wait([&](...) { DLOG << "Signal caught."; service.stop(); });
   service.run();
@@ -94,11 +96,13 @@ int main(int argc, char *argv[]) {
   uint32_t num_sent{0}, num_failed{0};
   auto last_clock = high_resolution_clock::now();
   boost::asio::io_service service;
+  riak::thread_pool threads{num_threads, &service};
 
   std::string message{"\x09\x0A\01\x62\x12\x01\x6B", 7};
   DLOG << "Creating connection pool...";
+
   std::unique_ptr<riak::connection_pool> conn{new riak::connection_pool{
-      hostname, port, num_threads, num_sockets, highwatermark}};
+      hostname, port, service, num_sockets, highwatermark}};
 
   DLOG << "Buffering messages... Don't Ctrl-C until done.";
   auto log_every = max(1u, nmsgs / 20u);
@@ -125,6 +129,7 @@ int main(int argc, char *argv[]) {
       if (num_sent == nmsgs)
         service.post([&] {
           DLOG << "All messages sent.";
+          conn.reset();
           service.stop();
         });
     });
@@ -133,7 +138,9 @@ int main(int argc, char *argv[]) {
   }
   DLOG << "Buffered all the messages.";
 
-  wait_on_signal(service);
+  wait_on_signal();
+  conn.reset();
+  service.stop();
   DLOG << "Destroying connection pool and cancelling any remaining requests...";
   conn.reset();
   DLOG << "Done. " << (num_sent - num_failed) << " out of " << num_sent

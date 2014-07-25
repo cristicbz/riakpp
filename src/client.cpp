@@ -2,6 +2,7 @@
 
 #include "connection.hpp"
 #include "connection_pool.hpp"
+#include "thread_pool.hpp"
 #include "debug_log.hpp"
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -9,9 +10,18 @@
 namespace riak {
 
 client::client(const std::string& hostname, uint16_t port,
+               sibling_resolver resolver, uint64_t deadline_ms,
+               size_t num_threads)
+    : threads_{new thread_pool{num_threads}},
+      connection_{new connection_pool{hostname, port, threads_->io_service()}},
+      io_service_{&threads_->io_service()},
+      resolver_{resolver}, deadline_ms_{deadline_ms} {}
+
+client::client(boost::asio::io_service& io_service,
+               const std::string& hostname, uint16_t port,
                sibling_resolver resolver, uint64_t deadline_ms)
-    : connection_{new connection_pool{hostname, port}},
-      resolver_{resolver},
+    : connection_{new connection_pool{hostname, port, io_service}},
+      io_service_{&io_service}, resolver_{resolver},
       deadline_ms_{deadline_ms} {}
 
 client::client(std::unique_ptr<connection> connection,

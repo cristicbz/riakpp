@@ -3,7 +3,6 @@
 
 #include "broker.hpp"
 #include "connection.hpp"
-#include "thread_pool.hpp"
 
 #include <boost/asio/ip/tcp.hpp>
 
@@ -11,6 +10,12 @@
 #include <string>
 #include <system_error>
 #include <vector>
+
+namespace boost {
+namespace asio {
+class io_service;
+}  // namespace asio
+}  // namespace boost
 
 namespace riak {
 
@@ -24,22 +29,18 @@ class connection_pool : public connection {
               std::errc::address_not_available)} {}
   };
 
-  static constexpr size_t default_num_threads = 0;
-  static constexpr size_t default_num_sockets = 16;
-  static constexpr size_t default_highwatermark = 65536;
+  static constexpr size_t default_num_sockets = 8;
+  static constexpr size_t default_highwatermark = 1024;
 
-  connection_pool(
-      const std::string& host, uint16_t port,
-      size_t num_threads = default_num_threads,
-      size_t num_sockets = default_num_sockets,
-      size_t highwatermark = default_highwatermark);
+  connection_pool(const std::string& host, uint16_t port,
+                  boost::asio::io_service& io_service,
+                  size_t num_sockets = default_num_sockets,
+                  size_t highwatermark = default_highwatermark);
 
 
   ~connection_pool();
 
   virtual void send_and_consume_request(request& new_request) override;
-
-  thread_pool& threads() { return thread_pool_; }
 
  private:
   void resolve(const std::string& host, int16_t port);
@@ -48,7 +49,6 @@ class connection_pool : public connection {
   broker<request> broker_;
   std::vector<std::unique_ptr<connection>> connections_;
   std::vector<boost::asio::ip::tcp::endpoint> endpoints_;
-  thread_pool thread_pool_;
   boost::asio::io_service& io_service_;
 };
 
