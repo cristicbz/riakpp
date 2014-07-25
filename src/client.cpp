@@ -2,8 +2,8 @@
 
 #include "connection.hpp"
 #include "connection_pool.hpp"
-#include "thread_pool.hpp"
 #include "debug_log.hpp"
+#include "thread_pool.hpp"
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 
