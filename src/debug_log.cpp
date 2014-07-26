@@ -14,7 +14,7 @@ debug_log_stream::debug_log_stream(const char* filename, const char* function,
   std::string fn{filename};
   auto slash = fn.find_last_of("/\\");
   if (slash != std::string::npos) fn = fn.substr(slash + 1);
-  location_ << fn << ":" << line << ":" << function << ": ";
+  location_ << fn << ":" << line;
 }
 
 debug_log_stream::~debug_log_stream() {
@@ -24,8 +24,8 @@ debug_log_stream::~debug_log_stream() {
 
   auto thread_id =
       id_map.insert({std::this_thread::get_id(), id_map.size()}).first->second;
-  std::cerr << "[" << thread_id << "] " << location_.str() << message_.str()
-            << std::endl;
+  std::cerr << "[" << thread_id << ":" << location_.str() << "] "
+            << message_.str() << std::endl;
 }
 
 }  // namespace internal

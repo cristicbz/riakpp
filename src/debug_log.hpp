@@ -3,7 +3,16 @@
 
 #include <sstream>
 
-#define DLOG ::riak::internal::debug_log_stream(__FILE__, __FUNCTION__, __LINE__)
+#ifdef RIAKPP_DEBUG_LOGGING
+#define RIAKPP_DLOG \
+  ::riak::internal::debug_log_stream(__FILE__, __FUNCTION__, __LINE__)
+#else
+#define RIAKPP_DLOG if (false) std::stringstream{}
+#endif
+
+#define RIAKPP_TRACE()                                                 \
+  ::riak::internal::debug_log_stream(__FILE__, __FUNCTION__, __LINE__) \
+      << "\x1b[32mTRACE \x1b[0m"
 
 namespace riak {
 namespace internal {
