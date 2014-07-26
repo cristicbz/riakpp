@@ -15,12 +15,12 @@ namespace {
 // Adapted from here:
 //   http://stackoverflow.com/questions/3151779
 void __attribute__((noinline)) dump_trace() {
-  void *trace[16];
+  void *trace[128];
   int i, trace_size = 0;
   char name_buf[512];
   name_buf[readlink("/proc/self/exe", name_buf, 511)] = 0;
 
-  trace_size = backtrace(trace, 16);
+  trace_size = backtrace(trace, 128);
   for (i = 2; i < trace_size; ++i) {
     std::cerr << (i == 2 ? "In " : "  called from ");
     std::cerr.flush();
