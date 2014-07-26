@@ -1,7 +1,7 @@
 #ifndef RIAKPP_CONNECTION_POOL_HPP_
 #define RIAKPP_CONNECTION_POOL_HPP_
 
-#include "broker.hpp"
+#include "async_queue.hpp"
 #include "connection.hpp"
 
 #include <boost/asio/ip/tcp.hpp>
@@ -46,7 +46,7 @@ class connection_pool : public connection {
   void resolve(const std::string& host, int16_t port);
   void add_worker_for(connection& sub_connection);
 
-  broker<request> broker_;
+  async_queue<request> request_queue_;
   std::vector<std::unique_ptr<connection>> connections_;
   std::vector<boost::asio::ip::tcp::endpoint> endpoints_;
   boost::asio::io_service& io_service_;

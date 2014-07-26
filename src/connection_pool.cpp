@@ -9,7 +9,7 @@ namespace ph = std::placeholders;
 namespace ip = boost::asio::ip;
 
 connection_pool::~connection_pool() {
-  broker_.close();
+  request_queue_.close();
   for (auto& c : connections_) c->shutdown();
   connections_.clear();
 }
@@ -17,7 +17,7 @@ connection_pool::~connection_pool() {
 connection_pool::connection_pool(const std::string &host, uint16_t port,
                                  boost::asio::io_service& io_service,
                                  size_t num_sockets, size_t highwatermark)
-    : broker_{highwatermark, num_sockets},
+    : request_queue_{highwatermark, num_sockets},
       io_service_(io_service) {
   resolve(host, port);
   for (size_t i_socket = 0; i_socket < num_sockets; ++i_socket) {
@@ -28,7 +28,7 @@ connection_pool::connection_pool(const std::string &host, uint16_t port,
 }
 
 void connection_pool::add_worker_for(connection& sub_connection) {
-  broker_.add_worker([this, &sub_connection](request& new_request) {
+  request_queue_.async_pop([this, &sub_connection](request& new_request) {
     // Wrap the request handler: first, notify the broker the connection is
     // ready again, then call the actual handler.
     auto real_handler = std::move(new_request.on_response);
