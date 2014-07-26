@@ -9,7 +9,7 @@ int main(int argc, char* argv[]) {
 
   // Create the client object. DNS resolution and connection is performed
   // lazily so any errors will be reported on the callback from the first
-  // operation.
+  // operation. Try running './store_fetch 1.2.3.4' or something to see this.
   riak::client client{hostname, port};
 
   // Helper for callbacks. On failure, save the error and bail.
@@ -23,8 +23,8 @@ int main(int argc, char* argv[]) {
     return false;
   };
 
-  // We'll perform three operations in order:
-  //   1. Store 'hello' at 'my_bucket/my_key'
+  // We'll perform the following operations in order:
+  //   1. Store 'hello' at 'my_bucket/my_key'.
   //   2. Fetch 'my_bucket/my_key' and check its value.
   //   3. Remove 'my_bucket/my_key.
   client.store(
