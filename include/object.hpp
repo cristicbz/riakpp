@@ -76,6 +76,7 @@ object::object(object&& other)
       valid_{other.valid_},
       exists_{other.exists_} {
   siblings_.Swap(&other.siblings_);
+  other.valid_ = false;
 }
 
 const std::string& object::bucket() const {
@@ -154,6 +155,7 @@ object& object::operator=(object&& other) {
   vclock_ = std::move(other.vclock_);
   valid_ = other.valid_;
   exists_ = other.exists_;
+  other.valid_ = false;
   return *this;
 }
 
