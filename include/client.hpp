@@ -44,13 +44,22 @@ class client {
          sibling_resolver resolver = &pass_through_resolver,
          uint64_t deadline_ms = default_deadline_ms);
 
+  client(client&& rhs) = default;
+  client& operator=(client&& rhs) = default;
+
   ~client();
 
   bool manages_io_service() const { return io_service_; }
   inline boost::asio::io_service& io_service() const;
 
+  void managed_run();
+  void managed_stop();
+
   template <class Handler>
   void fetch(std::string bucket, std::string key, Handler handler) const;
+
+  template <class Handler>
+  void fetch(riak::object object, Handler handler) const;
 
   template <class Handler>
   void store(std::string bucket, std::string key, std::string value,
@@ -120,6 +129,11 @@ void client::fetch(std::string bucket, std::string key, Handler handler) const {
   send(pbc::RpbMessageCode::GET_REQ, request,
        std::bind(&client::fetch_wrapper<Handler>, this, std::move(handler),
                  std::move(bucket), std::move(key), ph::_1, ph::_2));
+}
+
+template <class Handler>
+void client::fetch(riak::object object, Handler handler) const {
+  fetch(std::move(object.bucket_), std::move(object.key_), handler);
 }
 
 template <class Handler>
@@ -219,6 +233,7 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
 template <class Handler>
 void client::store_wrapper(Handler& handler, std::error_code error,
                            const std::string& serialized) {
+
   pbc::RpbPutResp response;
   parse(pbc::PUT_RESP, serialized, response, error);
   handler(error);

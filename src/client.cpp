@@ -27,6 +27,18 @@ client::client(boost::asio::io_service& io_service,
 
 client::~client() {}
 
+void client::managed_run() {
+  RIAKPP_CHECK(manages_io_service())
+      << "managed_run() called on client with unmanaged io_service";
+  io_service_->run();
+}
+
+void client::managed_stop() {
+  RIAKPP_CHECK(manages_io_service())
+      << "managed_stop() called on client with unmanaged io_service";
+  io_service_->stop();
+}
+
 store_resolved_sibling client::pass_through_resolver(object& conflicted) {
   return store_resolved_sibling::no;
 }
