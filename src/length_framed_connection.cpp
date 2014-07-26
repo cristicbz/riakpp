@@ -1,194 +1,147 @@
 #include "length_framed_connection.hpp"
 
 #include <array>
+#include <utility>
 
-#include <boost/asio/write.hpp>
+#include <boost/asio/buffer.hpp>
 #include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 
 #include "byte_order.hpp"
 #include "check.hpp"
 #include "debug_log.hpp"
+#include "endpoint_vector.hpp"
 
 namespace riak {
+namespace io = boost::asio;
+using io::ip::tcp;
 
-namespace ph = std::placeholders;
-namespace asio = boost::asio;
-namespace ip = boost::asio::ip;
-
-struct length_framed_connection::active_request_state {
-  active_request_state(length_framed_connection& connection,
-                       request& new_request)
-      : original_request{std::move(new_request)},
-        counter_item{connection.request_counter_} {}
-
-  request original_request;
-  std::string response;
-  uint32_t request_length = 0;
-  uint32_t response_length = 0;
-
-  blocking_counter::item counter_item;
-  std::atomic<bool> done{false};
-};
+template <class Handler>
+inline void set_timer(io::deadline_timer& timer, uint64_t milliseconds,
+                      Handler&& handler) {
+  if (milliseconds != length_framed_connection::no_deadline) {
+    timer.expires_from_now(boost::posix_time::milliseconds(milliseconds));
+    timer.async_wait(std::forward<Handler>(handler));
+  }
+}
 
 length_framed_connection::length_framed_connection(
-    asio::io_service& io_service,
-    const std::vector<ip::tcp::endpoint>& endpoints)
+    boost::asio::io_service& io_service, endpoint_iterator endpoints_begin,
+    endpoint_iterator endpoints_end, uint64_t connection_timeout_ms)
     : strand_{io_service},
+      timer_{io_service},
       socket_{io_service},
-      deadline_timer_{io_service},
-      endpoints_(endpoints) {}
+      resolver_{io_service},
+      endpoints_begin_{endpoints_begin},
+      endpoints_end_{endpoints_end},
+      connection_timeout_ms_{connection_timeout_ms},
+      transient_{*this} {}
 
-length_framed_connection::~length_framed_connection() {
-  shutdown();
-  request_counter_.wait_and_disable();
+void length_framed_connection::async_send(request_type request,
+                                          handler_type handler) {
+  RIAKPP_CHECK(accepts_requests_.exchange(false));
+  payload_buffer_ = std::move(request.payload);
+  on_response_ = std::move(handler);
+  deadline_ms_ = request.deadline_ms;
+  strand_.dispatch(transient_.wrap([this] { connect(); }));
 }
 
-void length_framed_connection::send_and_consume_request(request& new_request) {
-  // If there's another active request, kill the process.
-  RIAKPP_CHECK(!has_active_request_.exchange(true))
-      << "Unbuffered connection called again before request completion.";
+void length_framed_connection::connect() { connect_at(endpoints_begin_); }
 
-  auto state = std::make_shared<active_request_state>(*this, new_request);
-  current_request_state_ = state;
+void length_framed_connection::connect_at(endpoint_iterator current_endpoint) {
+  RIAKPP_CHECK(!accepts_requests_);
 
-  strand_.post(std::bind(&self_type::start_request, this, std::move(state)));
-}
-
-
-void length_framed_connection::shutdown() {
-  if (auto state = current_request_state_.lock()) {
-    strand_.post([this, state] {
-      state->done = true;
-      deadline_timer_.cancel();
-      if (socket_.is_open()) socket_.close();
-    });
-  }
-}
-
-void length_framed_connection::start_request(shared_request_state state) {
-  // Setup deadline timer if needed.
-  auto deadline_ms = state->original_request.deadline_ms;
-  if (deadline_ms >= 0) {
-    deadline_timer_.expires_from_now(
-        boost::posix_time::milliseconds(deadline_ms));
-
-    deadline_timer_.async_wait(strand_.wrap(
-        [this, state](asio_error error) {
-          if (state->done || error) return;
-          report_std_error(
-              std::move(state), std::make_error_code(std::errc::timed_out));
+  if (socket_.is_open()) {
+    write_request();
+  } else if (current_endpoint == endpoints_end_) {
+    report(std::errc::connection_refused);
+  } else {
+    set_timer(timer_, connection_timeout_ms_,
+              wrap([this](boost::system::error_code ec) {
+                if (!ec) {
+                  socket_.shutdown(tcp::socket::shutdown_both, ec);
+                  socket_.close();
+                }
+              }));
+    socket_.async_connect(
+        *current_endpoint,
+        wrap([this, current_endpoint](boost::system::error_code ec) {
+          if (!ec) {
+            write_request();
+          } else {
+            if (socket_.is_open()) {
+              socket_.shutdown(tcp::socket::shutdown_both, ec);
+              socket_.close();
+            }
+            connect_at(current_endpoint + 1);
+          }
         }));
   }
+}
 
-  // Send the request, but first connect asynchronously if disconnected.
-  if (!socket_.is_open()) {
-    connect(std::move(state));
-  } else {
-    write_request(std::move(state));
+void length_framed_connection::write_request() {
+  RIAKPP_CHECK(!accepts_requests_);
+
+  length_buffer_ = byte_order::host_to_network_long(payload_buffer_.size());
+  std::array<io::const_buffer, 2> buffers = {
+      {io::buffer(&length_buffer_, sizeof(length_buffer_)),
+       io::buffer(payload_buffer_, payload_buffer_.size())}};
+
+  io::async_write(socket_, std::move(buffers),
+                  wrap([this](boost::system::error_code ec, size_t) {
+                    if (!ec) {
+                      read_response();
+                      set_timer(timer_, deadline_ms_,
+                                wrap([this](boost::system::error_code ec) {
+                                  if (!ec) report(std::errc::timed_out);
+                                }));
+                    } else {
+                      report(ec);
+                    }
+                  }));
+}
+
+void length_framed_connection::read_response() {
+  RIAKPP_CHECK(!accepts_requests_);
+  io::async_read(
+      socket_, io::buffer(&length_buffer_, sizeof(length_buffer_)),
+      wrap([this](boost::system::error_code ec, size_t) {
+        if (ec) {
+          if (ec.value() != io::error::operation_aborted) report(ec);
+          return;
+        }
+        length_buffer_ = byte_order::network_to_host_long(length_buffer_);
+        payload_buffer_.resize(length_buffer_);
+        io::async_read(socket_, io::buffer(&payload_buffer_[0], length_buffer_),
+                       wrap([this](boost::system::error_code ec, size_t) {
+                         if (ec.value() != io::error::operation_aborted) {
+                           report(ec);
+                         }
+                       }));
+      }));
+}
+
+void length_framed_connection::report(std::errc ec) {
+  auto error_code = std::make_error_code(ec);
+  if (error_code) {
+    payload_buffer_.clear();
+    if (socket_.is_open()) socket_.close();
   }
+  auto postable_handler = std::bind(std::move(on_response_), error_code,
+                                    std::move(payload_buffer_));
+  accepts_requests_.store(true);
+  timer_.cancel();
+  strand_.get_io_service().post(postable_handler);
 }
 
-void length_framed_connection::connect(shared_request_state state,
-                                       size_t endpoint_index) {
-  RIAKPP_CHECK_LT(endpoint_index, endpoints_.size());
-
-  auto callback = [this, state, endpoint_index](asio_error error) {
-    if (state->done) return;
-    if (error) {
-      if (endpoint_index == endpoints_.size() - 1) {
-        report(std::move(state), error);
-      } else {
-        connect(std::move(state), endpoint_index + 1);
-      }
-    } else {
-      socket_.set_option(ip::tcp::no_delay{true});
-      write_request(std::move(state));
-    }
-  };
-
-  if (socket_.is_open()) socket_.close();
-  socket_.async_connect(endpoints_[endpoint_index],
-                        strand_.wrap(std::move(callback)));
-}
-
-void length_framed_connection::write_request(shared_request_state state) {
-  if (state->done) return;
-
-  auto& content = state->original_request.message;
-  auto& length = state->request_length;
-  length = byte_order::host_to_network_long(content.size());
-
-  std::array<asio::const_buffer, 2> buffers = {{
-      asio::buffer(reinterpret_cast<const uint8_t*>(&length), sizeof(length)),
-      asio::buffer(content.data(), content.size())}};
-
-  asio::async_write(socket_, std::move(buffers),
-                    strand_.wrap(std::bind(&self_type::wait_for_length, this,
-                                           state, ph::_1)));
-}
-
-void length_framed_connection::wait_for_length(shared_request_state state,
-                                               asio_error error) {
-  if (state->done) return;
-  if (error) {
-    report(state, error);
-    return;
-  }
-
-  // Clean up memory used to store the request.
-  std::string().swap(state->original_request.message);
-
-  auto& length = state->response_length;
-  auto handler = std::bind(&self_type::wait_for_content, this, std::move(state),
-                           ph::_1);
-  asio::async_read(
-      socket_,
-      asio::buffer(reinterpret_cast<uint8_t*>(&length), sizeof(length)),
-      strand_.wrap(std::move(handler)));
-
-}
-
-void length_framed_connection::wait_for_content(shared_request_state state,
-                                                asio_error error) {
-  if (state->done) return;
-  if (error) {
-    report(state, error);
-    return;
-  }
-
-  auto& length = state->response_length;
-  auto& content = state->response;
-  length = byte_order::host_to_network_long(length);
-  content.resize(length);
-
-  auto handler = std::bind(&self_type::report, this, state, ph::_1);
-  asio::async_read(socket_, asio::buffer(&content[0], length),
-                   strand_.wrap(std::move(handler)));
-}
-
-void length_framed_connection::report(shared_request_state state,
-                                      asio_error error) {
-  // Convert boost::system_error to std::system_error.
-  report_std_error(std::move(state),
-                   std::make_error_code(static_cast<std::errc>(error.value())));
-}
-
-void length_framed_connection::report_std_error(shared_request_state state,
-                                                std::error_code error) {
-  if (state->done) return;
-  RIAKPP_CHECK(current_request_state_.lock() == state);
-
-  if (error && socket_.is_open()) socket_.close();
-  deadline_timer_.cancel();
-
-  state->done.store(true);
-  has_active_request_.store(false);
-
-  if (state->original_request.on_response) {
-    auto handler = std::bind(std::move(state->original_request.on_response),
-                             std::move(state->response), error);
-    state.reset();
-    handler();
+inline void length_framed_connection::report(boost::system::error_code ec) {
+  switch (ec.value()) {
+    case io::error::eof:
+      report(std::errc::not_connected);
+      break;
+    default:
+      report(static_cast<std::errc>(ec.value()));
+      break;
   }
 }
 

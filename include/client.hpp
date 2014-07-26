@@ -19,7 +19,10 @@ class io_service;
 
 namespace riak {
 
-class connection;
+template <class Connection>
+class connection_pool;
+
+class length_framed_connection;
 
 enum class store_resolved_sibling {
   no = 0,
@@ -38,10 +41,6 @@ class client {
 
   client(boost::asio::io_service& io_service,
          const std::string& hostname, uint16_t port,
-         sibling_resolver resolver = &pass_through_resolver,
-         uint64_t deadline_ms = default_deadline_ms);
-
-  client(std::unique_ptr<connection> connection,
          sibling_resolver resolver = &pass_through_resolver,
          uint64_t deadline_ms = default_deadline_ms);
 
@@ -69,29 +68,31 @@ class client {
   static store_resolved_sibling pass_through_resolver(riak::object& conflicted);
 
  private:
+  using connection = connection_pool<length_framed_connection>;
+
   void send(pbc::RpbMessageCode code, const google::protobuf::Message& message,
-            std::function<void(std::string&, std::error_code&)> handler) const;
+            std::function<void(std::error_code, std::string&)> handler) const;
 
   static void parse(pbc::RpbMessageCode code, const std::string& serialized,
                     google::protobuf::Message& message, std::error_code& error);
 
   template <class Handler>
   void fetch_wrapper(Handler& handler, std::string& bucket, std::string& key,
-                     const std::string& serialized,
-                     std::error_code& error) const;
+                     std::error_code error,
+                     const std::string& serialized) const;
 
   template <class Handler>
-  static void store_wrapper(Handler& handler, const std::string& serialized,
-                            std::error_code& error);
+  static void store_wrapper(Handler& handler, std::error_code error,
+                            const std::string& serialized);
 
   template <class Handler>
   static void store_resolution_wrapper(Handler& handler, riak::object& object,
-                                     const std::string& serialized,
-                                     std::error_code& error);
+                                       std::error_code error,
+                                       const std::string& serialized);
 
   template <class Handler>
-  static void remove_wrapper(Handler& handler, const std::string& serialized,
-                             std::error_code& error);
+  static void remove_wrapper(Handler& handler, std::error_code error,
+                             const std::string& serialized);
 
   const std::unique_ptr<thread_pool> threads_;
   const std::unique_ptr<connection> connection_;
@@ -174,8 +175,8 @@ void client::remove(std::string bucket, std::string key,
 
 template <class Handler>
 void client::fetch_wrapper(Handler& handler, std::string& bucket,
-                           std::string& key, const std::string& serialized,
-                           std::error_code& error) const {
+                           std::string& key, std::error_code error,
+                           const std::string& serialized) const {
   namespace ph = std::placeholders;
   pbc::RpbGetResp response;
   object fetched{{},{}};
@@ -216,17 +217,17 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
 }
 
 template <class Handler>
-void client::store_wrapper(Handler& handler, const std::string& serialized,
-                           std::error_code& error) {
+void client::store_wrapper(Handler& handler, std::error_code error,
+                           const std::string& serialized) {
   pbc::RpbPutResp response;
   parse(pbc::PUT_RESP, serialized, response, error);
-  handler(std::move(error));
+  handler(error);
 }
 
 template <class Handler>
 void client::store_resolution_wrapper(Handler& handler, riak::object& resolved,
-                                      const std::string& serialized,
-                                      std::error_code& error) {
+                                      std::error_code error,
+                                      const std::string& serialized) {
   pbc::RpbPutResp response;
   parse(pbc::PUT_RESP, serialized, response, error);
   if (error) {
@@ -237,16 +238,15 @@ void client::store_resolution_wrapper(Handler& handler, riak::object& resolved,
   } else {
     resolved.vclock_ = std::move(*response.mutable_vclock());
   }
-  handler(std::move(resolved), std::move(error));
+  handler(std::move(resolved), error);
 }
 
-
 template <class Handler>
-void client::remove_wrapper(Handler& handler, const std::string& serialized,
-                            std::error_code& error) {
+void client::remove_wrapper(Handler& handler, std::error_code error,
+                            const std::string& serialized) {
   pbc::RpbDelResp response;
   parse(pbc::DEL_RESP, serialized, response, error);
-  handler(std::move(error));
+  handler(error);
 }
 
 }  // namespace riak

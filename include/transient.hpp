@@ -87,7 +87,8 @@ class transient {
 };
 
 template <typename TransientRef, typename Function>
-struct transient_function_wrapper {
+class transient_function_wrapper {
+ public:
   template <class FunctionConv>
   transient_function_wrapper(TransientRef ref, FunctionConv&& fun)
     : transient_ref_{std::move(ref)},
@@ -95,6 +96,13 @@ struct transient_function_wrapper {
 
   template <typename ...Args>
   void operator()(Args&&... args) const {
+    if (auto lock = transient_ref_.lock()) {
+      function_(std::forward<Args>(args)...);
+    }
+  }
+
+  template <typename ...Args>
+  void operator()(Args&&... args) {
     if (auto lock = transient_ref_.lock()) {
       function_(std::forward<Args>(args)...);
     }

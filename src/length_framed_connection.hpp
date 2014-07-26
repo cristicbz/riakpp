@@ -1,60 +1,92 @@
 #ifndef RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
 #define RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
 
-#include "blocking_counter.hpp"
-#include "connection.hpp"
-
-#include <boost/asio/strand.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/io_service.hpp>
-#include <boost/asio/ip/tcp.hpp>
-
-#include <vector>
 #include <atomic>
+#include <cstdint>
+#include <functional>
+#include <string>
+#include <system_error>
+#include <vector>
+
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/strand.hpp>
+
+#include "endpoint_vector.hpp"
+#include "transient.hpp"
+
+namespace boost {
+namespace system {
+class error_code;
+}  // namespace system
+namespace asio {
+class io_service;
+}  // namespace asio
+}  // namespace boost
 
 namespace riak {
 
-// TODO(cristicbz): Need better error handling.
-class length_framed_connection : public connection {
+class length_framed_connection {
  public:
+  using response_type = std::string;
+  using error_type = std::error_code;
+  using handler_type = std::function<void(error_type, response_type&)>;
+
+  static constexpr uint64_t no_deadline = -1;
+  static constexpr uint64_t default_connection_timeout = 1500;
+
+  struct request_type {
+    request_type() = default;
+    explicit request_type(std::string payload) : payload(std::move(payload)) {}
+    request_type(std::string payload, uint64_t deadline_ms)
+        : payload(std::move(payload)), deadline_ms{deadline_ms} {}
+
+    std::string payload;
+    uint64_t deadline_ms = no_deadline;
+  };
+
   length_framed_connection(
-      boost::asio::io_service& io_service,
-      const std::vector<boost::asio::ip::tcp::endpoint>& endpoints);
+      boost::asio::io_service& io_service, endpoint_iterator endpoints_begin,
+      endpoint_iterator endpoints_end,
+      uint64_t connection_timeout_ms = default_connection_timeout);
 
-  ~length_framed_connection();
+  void async_send(request_type request, handler_type handler);
 
-  virtual void send_and_consume_request(request& new_request) override;
-
-  virtual void shutdown() override;
+  bool accepts_request() const { return accepts_requests_; }
 
  private:
-  struct active_request_state;
-  friend struct active_request_state;
+  void connect();
+  void connect_at(endpoint_iterator current_endpoint);
+  void write_request();
+  void read_response();
+  void report(std::errc ec);
 
-  typedef length_framed_connection self_type;
-  typedef std::shared_ptr<active_request_state> shared_request_state;
-  typedef boost::system::error_code asio_error;
+  inline void report(boost::system::error_code ec);
 
-  void start_request(shared_request_state state);
-  void connect(shared_request_state state, size_t endpoint_index = 0);
-  void write_request(shared_request_state state);
-  void wait_for_length(shared_request_state, asio_error error);
-  void wait_for_content(shared_request_state state, asio_error error);
-  void report(shared_request_state state, asio_error error);
-  void report_std_error(shared_request_state state, std::error_code error);
+  template <class Handler>
+  auto wrap(Handler&& handler)
+      -> decltype(std::declval<transient<length_framed_connection>>().wrap(
+          std::declval<boost::asio::strand>().wrap(handler))) {
+    return transient_.wrap(strand_.wrap(handler));
+  }
 
-  boost::asio::io_service::strand strand_;
+  boost::asio::strand strand_;
+  boost::asio::deadline_timer timer_;
   boost::asio::ip::tcp::socket socket_;
-  boost::asio::deadline_timer deadline_timer_;
-  const std::vector<boost::asio::ip::tcp::endpoint>& endpoints_;
+  boost::asio::ip::tcp::resolver resolver_;
 
-  std::atomic<bool> has_active_request_{false};
-  std::weak_ptr<active_request_state> current_request_state_;
+  std::atomic<bool> accepts_requests_{true};
+  const endpoint_iterator endpoints_begin_;
+  const endpoint_iterator endpoints_end_;
+  const uint64_t connection_timeout_ms_ = 0;
 
-  blocking_counter request_counter_;
+  handler_type on_response_;
+  std::string payload_buffer_;
+  uint32_t length_buffer_ = 0;
+  uint64_t deadline_ms_ = 0;
+
+  transient<length_framed_connection> transient_;
 };
 
 }  // namespace riak
 
 #endif  // #ifndef RIAKPP_LENGTH_FRAMED_CONNECTION_HPP_
-

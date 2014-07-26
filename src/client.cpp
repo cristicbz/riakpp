@@ -1,8 +1,8 @@
 #include "client.hpp"
 
-#include "connection.hpp"
 #include "connection_pool.hpp"
 #include "debug_log.hpp"
+#include "length_framed_connection.hpp"
 #include "thread_pool.hpp"
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
@@ -13,21 +13,16 @@ client::client(const std::string& hostname, uint16_t port,
                sibling_resolver resolver, uint64_t deadline_ms,
                size_t num_threads)
     : threads_{new thread_pool{num_threads}},
-      connection_{new connection_pool{hostname, port, threads_->io_service()}},
+      connection_{new connection{threads_->io_service(), hostname, port}},
       io_service_{&threads_->io_service()},
-      resolver_{resolver}, deadline_ms_{deadline_ms} {}
+      resolver_{resolver},
+      deadline_ms_{deadline_ms} {}
 
 client::client(boost::asio::io_service& io_service,
                const std::string& hostname, uint16_t port,
                sibling_resolver resolver, uint64_t deadline_ms)
-    : connection_{new connection_pool{hostname, port, io_service}},
+    : connection_{new connection{io_service, hostname, port}},
       io_service_{&io_service}, resolver_{resolver},
-      deadline_ms_{deadline_ms} {}
-
-client::client(std::unique_ptr<connection> connection,
-               sibling_resolver resolver, uint64_t deadline_ms)
-    : connection_{std::move(connection)},
-      resolver_{resolver},
       deadline_ms_{deadline_ms} {}
 
 client::~client() {}
@@ -50,7 +45,7 @@ void client::parse(pbc::RpbMessageCode code, const std::string& serialized,
       error = std::make_error_code(std::errc::io_error);
     } else {
       // TODO(cristicbz): Do something else with the error message.
-      DLOG << "RIAK ERROR: " << response.errmsg();
+      RIAKPP_DLOG << "RIAK ERROR: " << response.errmsg();
       error = std::make_error_code(std::errc::protocol_error);
     }
   } else if (serialized[0] != code ||
@@ -61,18 +56,17 @@ void client::parse(pbc::RpbMessageCode code, const std::string& serialized,
 
 void client::send(pbc::RpbMessageCode code,
                   const google::protobuf::Message& message,
-                  connection::response_handler handler) const {
+                  connection::handler_type handler) const {
   static const size_t min_message_size = 64;
 
-  connection::request new_request;
+  connection::request_type new_request;
   new_request.deadline_ms = deadline_ms_;
-  new_request.on_response = std::move(handler);
-  new_request.message.reserve(min_message_size);
-  new_request.message.push_back(static_cast<char>(code));
-  google::protobuf::io::StringOutputStream message_stream(&new_request.message);
+  new_request.payload.reserve(min_message_size);
+  new_request.payload.push_back(static_cast<char>(code));
+  google::protobuf::io::StringOutputStream message_stream(&new_request.payload);
   message.SerializeToZeroCopyStream(&message_stream);
 
-  connection_->send_and_consume_request(new_request);
+  connection_->async_send(new_request, std::move(handler));
 }
 
 }  // namespace riak

@@ -8,7 +8,6 @@ add_library(
   riakpp SHARED
     check.cpp
     client.cpp
-    connection_pool.cpp
     debug_log.cpp
     length_framed_connection.cpp
     thread_pool.cpp
