@@ -11,7 +11,7 @@ namespace riak {
 
 class thread_pool {
  public:
-  static constexpr size_t use_hardware_threads = static_cast<size_t>(-1);
+  static constexpr size_t use_hardware_threads = 0;
 
   thread_pool(size_t num_threads = use_hardware_threads,
               boost::asio::io_service* io_service = nullptr);

@@ -99,7 +99,7 @@ int main(int argc, char *argv[]) {
 
   std::unique_ptr<riak::connection_pool<riak::length_framed_connection>> conn{
       new riak::connection_pool<riak::length_framed_connection>{
-          service, hostname, port, num_sockets, highwatermark}};
+          service, hostname, port, num_sockets, highwatermark, 1000}};
 
   RIAKPP_DLOG << "Buffering messages... Don't Ctrl-C until done.";
   auto log_every = max(1u, nmsgs / 20u);
