@@ -8,7 +8,7 @@ ExternalProject_Add(
 )
 ExternalProject_Get_Property(GTest binary_dir)
 ExternalProject_Get_Property(GTest source_dir)
-include_directories(${source_dir}/include)
+include_directories(SYSTEM ${source_dir}/include)
 link_directories(${binary_dir})
 enable_testing(true)
 
@@ -20,15 +20,20 @@ ExternalProject_Add(
 )
 ExternalProject_Get_Property(GMock binary_dir)
 ExternalProject_Get_Property(GMock source_dir)
-include_directories(${source_dir}/include)
+include_directories(SYSTEM ${source_dir}/include)
 link_directories(${binary_dir})
 
-file(GLOB TEST_FILES *_test.cpp)
 add_executable(
   unittests
-    unittests_main.cpp
+    blocking_group_test.cpp
+    completion_group_test.cpp
+    connection_pool_test.cpp
+    length_framed_connection_test.cpp
+    object_test.cpp
+    store_handler_test.cpp
+
     test_length_framed_server.cpp
-    ${TEST_FILES}
+    unittests_main.cpp
 )
 
 add_dependencies(unittests GTest)
