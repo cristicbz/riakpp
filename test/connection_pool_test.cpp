@@ -24,7 +24,7 @@ TEST(ConnectionPoolTest, SequencedMessages) {
   thread_pool threads{4};
   std::unique_ptr<connection_pool<length_framed_connection>> pool{
       new connection_pool<length_framed_connection>{
-          threads.io_service(), "localhost", server.port(), 2}};
+          threads.io_service(), "localhost", server.port(), 2, 4096, 1000}};
 
   send_and_expect(*pool, "okay1", 100, errc_success, "okay1_reply", [&] {
   send_and_expect(*pool, "okay2", 100, errc_success, "okay2_reply", [&] {
@@ -54,7 +54,8 @@ TEST(ConnectionPoolTest, ManyMessages) {
 
     std::unique_ptr<connection_pool<length_framed_connection>> pool{
         new connection_pool<length_framed_connection>{
-            threads.io_service(), "localhost", server.port(), num_connections}};
+            threads.io_service(), "localhost", server.port(), num_connections,
+            4096, 1000}};
 
     // Expect 'msgs_to_send' messages (in any order) and reply to 'msg' with
     // 'msg_reply'.
@@ -119,7 +120,7 @@ TEST(ConnectionPoolTest, ConnectionRefused) {
     thread_pool threads{4};
     std::unique_ptr<connection_pool<length_framed_connection>> pool{
         new connection_pool<length_framed_connection>{
-            threads.io_service(), "localhost", random_port(), 3}};
+            threads.io_service(), "localhost", random_port(), 3, 4096, 1000}};
 
     for (size_t i_msg = 0; i_msg < msgs_to_send; ++i_msg) {
       send_and_expect(*pool, "a", 1000, std::errc::connection_refused, "", [&] {
