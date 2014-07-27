@@ -1,9 +1,10 @@
 include_directories(SYSTEM ".")
-add_executable(
-  store_fetch
-    store_fetch.cpp
-)
-target_link_libraries(
-  store_fetch
-    riakpp
-)
+
+function(riakpp_example name)
+  add_executable(${name} ${name}.cpp)
+  target_link_libraries(${name} riakpp)
+endfunction()
+
+riakpp_example(store_fetch)
+riakpp_example(store_fetch_blocking)
+riakpp_example(store_many)
