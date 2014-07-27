@@ -10,20 +10,28 @@
 namespace riak {
 
 client::client(const std::string& hostname, uint16_t port,
-               sibling_resolver resolver, uint64_t deadline_ms,
-               size_t num_threads)
-    : threads_{new thread_pool{num_threads}},
-      connection_{new connection{threads_->io_service(), hostname, port}},
+               sibling_resolver resolver, connection_options options)
+    : threads_{new thread_pool{options.num_worker_threads()}},
+      connection_{new connection{
+          threads_->io_service(), hostname, port, options.max_sockets(),
+          options.highwatermark(), options.connection_timeout_ms()}},
       io_service_{&threads_->io_service()},
-      resolver_{resolver},
-      deadline_ms_{deadline_ms} {}
+      resolver_{std::move(resolver)},
+      deadline_ms_{options.deadline_ms()} {}
 
-client::client(boost::asio::io_service& io_service,
-               const std::string& hostname, uint16_t port,
-               sibling_resolver resolver, uint64_t deadline_ms)
-    : connection_{new connection{io_service, hostname, port}},
-      io_service_{&io_service}, resolver_{resolver},
-      deadline_ms_{deadline_ms} {}
+client::client(boost::asio::io_service& io_service, const std::string& hostname,
+               uint16_t port, sibling_resolver resolver,
+               connection_options options)
+    : connection_{new connection{
+          io_service, hostname, port, options.max_sockets(),
+          options.highwatermark(), options.connection_timeout_ms()}},
+      io_service_{&io_service},
+      resolver_{std::move(resolver)},
+      deadline_ms_{options.deadline_ms()} {
+  RIAKPP_CHECK(options.defaulted_num_worker_threads())
+      << "When using an external io_service, no threads are spawned so the "
+         "number of threads cannot be specified.";
+}
 
 client::~client() {}
 

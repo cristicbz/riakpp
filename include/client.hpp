@@ -2,6 +2,7 @@
 #define RIAKPP_CLIENT_HPP_
 
 #include "check.hpp"
+#include "connection_options.hpp"
 #include "object.hpp"
 #include "riak_kv.pb.h"
 #include "thread_pool.hpp"
@@ -31,18 +32,16 @@ enum class store_resolved_sibling {
 
 class client {
  public:
-  static constexpr uint64_t default_deadline_ms = 3000;
   using sibling_resolver = std::function<store_resolved_sibling(riak::object&)>;
 
   client(const std::string& hostname, uint16_t port,
          sibling_resolver resolver = &pass_through_resolver,
-         uint64_t deadline_ms = default_deadline_ms,
-         size_t num_threads = thread_pool::use_hardware_threads);
+         connection_options options = {});
 
   client(boost::asio::io_service& io_service,
          const std::string& hostname, uint16_t port,
          sibling_resolver resolver = &pass_through_resolver,
-         uint64_t deadline_ms = default_deadline_ms);
+         connection_options options = {});
 
   client(client&& rhs) = default;
   client& operator=(client&& rhs) = default;
