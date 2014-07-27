@@ -1,6 +1,8 @@
 #include "example_util.hpp"
 #include "riakpp/client.hpp"
 
+// Store, fetch and remove a value, using the preferred, asynchronous method.
+// This is surprisingly convenient thanks to nested lambdas.
 int main(int argc, char* argv[]) {
   // Parse [host:port] from the command line arguments.
   std::string hostname = "localhost";
@@ -24,16 +26,16 @@ int main(int argc, char* argv[]) {
   };
 
   // We'll perform the following operations in order:
-  //   1. Store 'hello' at 'my_bucket/my_key'.
-  //   2. Fetch 'my_bucket/my_key' and check its value.
-  //   3. Remove 'my_bucket/my_key.
+  //   1. Store 'hello' at 'example_bucket/example_key'.
+  //   2. Fetch 'example_bucket/example_key' and check its value.
+  //   3. Remove 'example_bucket/example_key.
   client.store(
-      "my_bucket", "my_key", "hello", [&](std::error_code ec) {
+      "example_bucket", "example_key", "hello", [&](std::error_code ec) {
     if (should_bail(ec)) return;
     std::cout << "Stored 'hello'." << std::endl;
 
-    client.fetch(
-        "my_bucket", "my_key", [&](riak::object object, std::error_code ec) {
+    client.fetch("example_bucket", "example_key",
+                 [&](riak::object object, std::error_code ec) {
       if (should_bail(ec)) return;
       std::cout << "Fetched '" << object.value() << "'." << std::endl;
 
