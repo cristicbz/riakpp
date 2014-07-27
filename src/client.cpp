@@ -13,7 +13,7 @@ client::client(const std::string& hostname, uint16_t port,
                sibling_resolver resolver, connection_options options)
     : threads_{new thread_pool{options.num_worker_threads()}},
       connection_{new connection{
-          threads_->io_service(), hostname, port, options.max_sockets(),
+          threads_->io_service(), hostname, port, options.max_connections(),
           options.highwatermark(), options.connection_timeout_ms()}},
       io_service_{&threads_->io_service()},
       resolver_{std::move(resolver)},
@@ -23,7 +23,7 @@ client::client(boost::asio::io_service& io_service, const std::string& hostname,
                uint16_t port, sibling_resolver resolver,
                connection_options options)
     : connection_{new connection{
-          io_service, hostname, port, options.max_sockets(),
+          io_service, hostname, port, options.max_connections(),
           options.highwatermark(), options.connection_timeout_ms()}},
       io_service_{&io_service},
       resolver_{std::move(resolver)},
