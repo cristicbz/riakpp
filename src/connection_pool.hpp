@@ -25,7 +25,7 @@ class connection_pool {
   using response_type = typename connection_type::response_type;
 
   connection_pool(boost::asio::io_service& io_service, std::string hostname,
-                  uint16_t port, size_t num_connections, size_t highwatermark,
+                  uint16_t port, size_t max_connections, size_t highwatermark,
                   uint64_t connection_timeout_ms);
   ~connection_pool();
 
@@ -39,9 +39,9 @@ class connection_pool {
     handler_type handler;
   };
 
-  void resolve(size_t num_connections, std::string hostname, uint16_t port);
+  void resolve(size_t max_connections, std::string hostname, uint16_t port);
   void report_resolution_error(boost::system::error_code asio_error);
-  void create_connections(size_t num_connections);
+  void create_connections(size_t max_connections);
   void notify_connection_ready(connection_type& connection);
   void send_request(connection_type& connection, packaged_request packaged);
 
@@ -57,14 +57,14 @@ class connection_pool {
 template <class Connection>
 connection_pool<Connection>::connection_pool(
     boost::asio::io_service& io_service, std::string hostname, uint16_t port,
-    size_t num_connections, size_t highwatermark,
+    size_t max_connections, size_t highwatermark,
     uint64_t connection_timeout_ms)
     : io_service_(io_service),
-      request_queue_{highwatermark, num_connections},
+      request_queue_{highwatermark, max_connections},
       connection_timeout_ms_{connection_timeout_ms},
       transient_{*this} {
-  connections_.reserve(num_connections);
-  resolve(num_connections, std::move(hostname), port);
+  connections_.reserve(max_connections);
+  resolve(max_connections, std::move(hostname), port);
 }
 
 template <class Connection>
@@ -81,7 +81,7 @@ void connection_pool<Connection>::async_send(request_type request,
 }
 
 template <class Connection>
-void connection_pool<Connection>::resolve(size_t num_connections,
+void connection_pool<Connection>::resolve(size_t max_connections,
                                           std::string hostname, uint16_t port) {
   using resolver = boost::asio::ip::tcp::resolver;
   auto* resolver_raw = new resolver{io_service_};
@@ -89,7 +89,7 @@ void connection_pool<Connection>::resolve(size_t num_connections,
   auto self_ref = transient_.ref();
   resolver_raw->async_resolve(
       std::move(query),
-      transient_.wrap([this, resolver_raw, num_connections](
+      transient_.wrap([this, resolver_raw, max_connections](
           boost::system::error_code ec,
           boost::asio::ip::tcp::resolver::iterator endpoint_begin) {
         std::unique_ptr<resolver> resolver_destroyer{resolver_raw};
@@ -97,7 +97,7 @@ void connection_pool<Connection>::resolve(size_t num_connections,
           report_resolution_error(ec);
         } else {
           endpoints_.assign(endpoint_begin, decltype(endpoint_begin) {});
-          create_connections(num_connections);
+          create_connections(max_connections);
         }
       }));
 }
@@ -116,9 +116,9 @@ void connection_pool<Connection>::report_resolution_error(
 }
 
 template <class Connection>
-void connection_pool<Connection>::create_connections(size_t num_connections) {
+void connection_pool<Connection>::create_connections(size_t max_connections) {
   RIAKPP_CHECK_GE(endpoints_.size(), 0);
-  for (size_t i_conn = 0; i_conn < num_connections; ++i_conn) {
+  for (size_t i_conn = 0; i_conn < max_connections; ++i_conn) {
     connections_.emplace_back(
         new connection_type{io_service_, endpoints_.begin(), endpoints_.end(),
                             connection_timeout_ms_});
