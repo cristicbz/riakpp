@@ -13,7 +13,7 @@ class connection_options {
   RIAKPP_DEFINE_OPTION(size_t, max_connections, 8)
   RIAKPP_DEFINE_OPTION(uint64_t, deadline_ms, 3000)
   RIAKPP_DEFINE_OPTION(uint64_t, connection_timeout_ms, 1500)
-  RIAKPP_DEFINE_OPTION(size_t, num_worker_threads, 0)
+  RIAKPP_DEFINE_OPTION(size_t, num_worker_threads, 1)
 };
 }  // namespace riak
 
