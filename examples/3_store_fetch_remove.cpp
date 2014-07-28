@@ -2,7 +2,6 @@
 #include "riakpp/client.hpp"
 
 // Store, fetch and remove a value, using the preferred, asynchronous method.
-// This is surprisingly convenient thanks to nested lambdas.
 int main(int argc, char* argv[]) {
   // Parse [host:port] from the command line arguments.
   std::string hostname = "localhost";
@@ -19,32 +18,46 @@ int main(int argc, char* argv[]) {
   auto should_bail = [&] (std::error_code to_check) -> bool {
     if (to_check) {
       error = to_check;
-      client.managed_stop();
+      client.stop_managed();
       return true;
     }
     return false;
   };
 
   // We'll perform the following operations in order:
-  //   1. Store 'hello' at 'example_bucket/example_key'.
-  //   2. Fetch 'example_bucket/example_key' and check its value.
-  //   3. Remove 'example_bucket/example_key.
-  client.store(
-      "example_bucket", "example_key", "hello", [&](std::error_code ec) {
+  //   1. Fetch a new object 'example_bucket/example_key'.
+  //   2. Store 'hello' there
+  //   3. Fetch it again and check its value.
+  //   4. Remove it.
+  client.async_fetch("example_bucket", "example_key",
+                     [&](std::error_code ec, riak::object initial) {
     if (should_bail(ec)) return;
-    std::cout << "Stored 'hello'." << std::endl;
+    if (!initial.exists()) {
+      std::cout << "Fetched new object, storing 'hello'..." << std::endl;
+      initial.value() = "hello";
+    } else {
+      std::cout << "Fetched existing object '" << initial.value()
+                << "'. Appending 'hello'." << std::endl;
+      initial.value() += "hello";
+    }
 
-    client.fetch("example_bucket", "example_key",
-                 [&](riak::object object, std::error_code ec) {
+    client.async_store(initial, [&](std::error_code ec) {
       if (should_bail(ec)) return;
-      std::cout << "Fetched '" << object.value() << "'." << std::endl;
+      std::cout << "Stored. Refetching..." << std::endl;
 
-      client.remove(object, [&](std::error_code ec) {
+      client.async_fetch("example_bucket", "example_key",
+                         [&](std::error_code ec, riak::object refetched) {
         if (should_bail(ec)) return;
-        std::cout << "Removed." << std::endl;
+        std::cout << "Fetched '" << refetched.value() << "'. Removing..."
+                  << std::endl;
 
-        // Stopping the client will unblock the main thread.
-        client.managed_stop();
+        client.async_remove(refetched, [&](std::error_code ec) {
+          if (should_bail(ec)) return;
+          std::cout << "Removed." << std::endl;
+
+          // Stopping the client will unblock the main thread.
+          client.stop_managed();
+        });
       });
     });
   });
@@ -52,7 +65,7 @@ int main(int argc, char* argv[]) {
   // Block (and run callbacks) until .managed_stop() is called. If we didn't
   // have this line, the client will be destroyed without waiting for
   // operations to complete. Blocking destructors are trouble.
-  client.managed_run();
+  client.run_managed();
   if (error) {
     std::cerr << "ERROR: " << error.message() << std::endl;
     return 1;

@@ -17,6 +17,7 @@ int main(int argc, char* argv[]) {
   // called. It starts in a 'pending' state where it allows handlers to be added
   // to the group using either .wrap() or .save(), see the examples below.
   auto blocking = riak::blocking_group{};
+  riak::object object{"example_bucket", "example_key"};
   std::error_code error;
 
   // A small helper to print error messages.
@@ -33,29 +34,45 @@ int main(int argc, char* argv[]) {
   };
 
   // A blocking group allows you to block until a group of handlers have been
-  // called. The first syntax we can use is blocking.wrap(some_handler):
-  client.store("example_bucket", "example_key", "hello",
-               blocking.wrap([&](std::error_code ec) { error = ec; }));
+  // called. If all we want to do with the results of an operation is save them
+  // to local variables then we can use the blocking.save(var1, var2, ...)
+  // syntax:
+  client.async_fetch(object, blocking.save(error, object));
+  blocking.wait_and_reset();  // Block until the fetch is done. Reset to reuse.
+  if (should_bail(error)) return 1;
+  if (!object.exists()) {
+    std::cout << "Fetched new object, storing 'hello'..." << std::endl;
+    object.value() = "hello";
+  } else {
+    std::cout << "Fetched existing object '" << object.value()
+              << "'. Appending 'hello'." << std::endl;
+    object.value() += "hello";
+  }
 
-  // Restting the group after waiting allows us to reuse it.
+  // Note that this isn't really a synchronous API, there still is a handler
+  // being called in a different thread, but it is provided by 'blocking'. If
+  // we want better control over that handler, but still block until after it's
+  // called, we can use wrap() instead of save():
+  object.value() = "hello";
+  client.async_store(object, blocking.wrap([&](std::error_code ec) {
+                               std::cerr << "Wohoo, I'm in another thread!\n";
+                               error = ec;
+                             }));
+  if (should_bail(error)) return 1;
+  std::cout << "Stored. Refetching..." << std::endl;
+
+  // Clear the value and refetch the object to a local variable using save.
+  object.value() = "";
+  client.async_fetch(object, blocking.save(error, object));
   blocking.wait_and_reset();
   if (should_bail(error)) return 1;
-  std::cout << "Stored." << std::endl;
-
-  // When all a handler does is save values to local variables, we can use
-  // the convenience syntax blocking.save(var1, var2, ...).
-  riak::object to_fetch{"example_bucket", "example_key"};
-  client.fetch(to_fetch, blocking.save(to_fetch, error));
-  blocking.wait_and_reset();
-  if (should_bail(error)) return 1;
-  std::cout << "Fetched '" << to_fetch.value() << "'." << std::endl;
+  std::cout << "Fetched '" << object.value() << "'. Removing..." << std::endl;
 
   // Finally, let's remove the object. Notice we don't reset the blocking group
   // again otherwise we would be destroying a pending blocking group.
-  client.remove(to_fetch, blocking.save(error));
+  client.async_remove(object, blocking.save(error));
   blocking.wait();
   if (should_bail(error)) return 1;
-
-  std::cout << "Everything ok, clean exit." << std::endl;
+  std::cout << "Removed. Everything ok, clean exit." << std::endl;
   return 0;
 }

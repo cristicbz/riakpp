@@ -51,27 +51,27 @@ class client {
   bool manages_io_service() const { return io_service_; }
   inline boost::asio::io_service& io_service() const;
 
-  void managed_run();
-  void managed_stop();
+  void run_managed();
+  void stop_managed();
 
   template <class Handler>
-  void fetch(std::string bucket, std::string key, Handler handler) const;
+  void async_fetch(std::string bucket, std::string key, Handler handler) const;
 
   template <class Handler>
-  void fetch(riak::object object, Handler handler) const;
+  void async_fetch(riak::object object, Handler handler) const;
 
   template <class Handler>
-  void store(std::string bucket, std::string key, std::string value,
+  void async_store(std::string bucket, std::string key, std::string value,
              Handler handler) const;
 
   template <class Handler>
-  void store(riak::object object, Handler handler) const;
+  void async_store(riak::object object, Handler handler) const;
 
   template <class Handler>
-  void remove(std::string bucket, std::string key, Handler handler) const;
+  void async_remove(std::string bucket, std::string key, Handler handler) const;
 
   template <class Handler>
-  void remove(riak::object object, Handler handler) const;
+  void async_remove(riak::object object, Handler handler) const;
 
   static store_resolved_sibling pass_through_resolver(riak::object& conflicted);
 
@@ -115,7 +115,8 @@ boost::asio::io_service& client::io_service() const {
 }
 
 template <class Handler>
-void client::fetch(std::string bucket, std::string key, Handler handler) const {
+void client::async_fetch(std::string bucket, std::string key,
+                         Handler handler) const {
   namespace ph = std::placeholders;
   pbc::RpbGetReq request;
   // TODO(cristicbz): These copies can be removed by reusing the strings after
@@ -131,13 +132,13 @@ void client::fetch(std::string bucket, std::string key, Handler handler) const {
 }
 
 template <class Handler>
-void client::fetch(riak::object object, Handler handler) const {
-  fetch(std::move(object.bucket_), std::move(object.key_), handler);
+void client::async_fetch(riak::object object, Handler handler) const {
+  async_fetch(std::move(object.bucket_), std::move(object.key_), handler);
 }
 
 template <class Handler>
-void client::store(std::string bucket, std::string key, std::string value,
-                   Handler handler) const {
+void client::async_store(std::string bucket, std::string key, std::string value,
+                         Handler handler) const {
   namespace ph = std::placeholders;
   pbc::RpbPutReq request;
   request.mutable_bucket()->swap(bucket);
@@ -149,7 +150,7 @@ void client::store(std::string bucket, std::string key, std::string value,
 }
 
 template <class Handler>
-void client::store(riak::object object, Handler handler) const {
+void client::async_store(riak::object object, Handler handler) const {
   namespace ph = std::placeholders;
   pbc::RpbPutReq request;
   request.mutable_bucket()->swap(object.bucket_);
@@ -165,7 +166,7 @@ void client::store(riak::object object, Handler handler) const {
 }
 
 template <class Handler>
-void client::remove(riak::object object, Handler handler) const {
+void client::async_remove(riak::object object, Handler handler) const {
   namespace ph = std::placeholders;
   pbc::RpbDelReq request;
   *request.mutable_bucket() = std::move(object.bucket_);
@@ -176,8 +177,8 @@ void client::remove(riak::object object, Handler handler) const {
 }
 
 template <class Handler>
-void client::remove(std::string bucket, std::string key,
-                    Handler handler) const {
+void client::async_remove(std::string bucket, std::string key,
+                          Handler handler) const {
   namespace ph = std::placeholders;
   pbc::RpbDelReq request;
   *request.mutable_bucket() = std::move(bucket);
@@ -226,7 +227,7 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
     fetched = object{std::move(bucket), std::move(key)};
   }
 
-  handler(std::move(fetched), std::move(error));
+  handler(error, std::move(fetched));
 }
 
 template <class Handler>
@@ -252,7 +253,7 @@ void client::store_resolution_wrapper(Handler& handler, riak::object& resolved,
   } else {
     resolved.vclock_ = std::move(*response.mutable_vclock());
   }
-  handler(std::move(resolved), error);
+  handler(error, std::move(resolved));
 }
 
 template <class Handler>

@@ -35,15 +35,15 @@ client::client(boost::asio::io_service& io_service, const std::string& hostname,
 
 client::~client() {}
 
-void client::managed_run() {
+void client::run_managed() {
   RIAKPP_CHECK(manages_io_service())
-      << "managed_run() called on client with unmanaged io_service";
+      << "run_managed() called on client with unmanaged io_service";
   io_service_->run();
 }
 
-void client::managed_stop() {
+void client::stop_managed() {
   RIAKPP_CHECK(manages_io_service())
-      << "managed_stop() called on client with unmanaged io_service";
+      << "stop_managed() called on client with unmanaged io_service";
   io_service_->stop();
 }
 
