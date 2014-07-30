@@ -1,3 +1,5 @@
+include_directories("../include/")
+
 protobuf_generate_cpp(RIAK_PB_SRCS RIAK_PB_HDRS proto/riak.proto)
 set(RIAK_PB ${RIAK_PB_SRCS} ${RIAK_PB_HDRS})
 
@@ -17,16 +19,6 @@ target_link_libraries(
   riakpp
     ${Boost_LIBRARIES}
     ${PROTOBUF_LIBRARY}
-)
-
-add_executable(
-  riaktool
-    riaktool.cpp
-)
-target_link_libraries(
-  riaktool
-    riakpp
-    ${Boost_LIBRARIES}
 )
 
 install(TARGETS riakpp

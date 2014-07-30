@@ -1,3 +1,5 @@
+if (BUILD_EXAMPLES)
+
 include_directories(SYSTEM ".")
 
 function(riakpp_example name)
@@ -10,3 +12,5 @@ riakpp_example(2_store_io_service)
 riakpp_example(3_store_fetch_remove)
 riakpp_example(4_blocking_groups)
 riakpp_example(5_completion_groups)
+
+endif (BUILD_EXAMPLES)

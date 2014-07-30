@@ -1,8 +1,11 @@
 project(riakpp)
 cmake_minimum_required (VERSION 2.8)
-
 set(CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake_modules")
-include_directories("../include/")
+
+# Configuration Options
+# ==============================================================================
+OPTION(BUILD_EXAMPLES OFF "Enable building of the examples")
+OPTION(BUILD_TESTS OFF "Enable building of tests")
 
 # C++ Flags
 # ==============================================================================
@@ -22,7 +25,6 @@ endif()
 find_package(
   Boost 1.53
     COMPONENTS
-      program_options
       system
     REQUIRED
 )
@@ -40,8 +42,8 @@ include_directories(
 include_directories("src" "include")
 
 add_subdirectory("src")
-add_subdirectory("test")
 add_subdirectory("examples")
+add_subdirectory("test")
 
 # Install Scripts
 # ==============================================================================
