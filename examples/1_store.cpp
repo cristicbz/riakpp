@@ -9,5 +9,5 @@ int main() {
     client.stop_managed();  // Unblocks main thread.
   });
 
-  client.run_managed();  // Block until client.managed_stop().
+  client.run_managed();  // Block until client.stop_managed().
 }
