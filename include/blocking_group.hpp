@@ -33,6 +33,8 @@ class blocking_group {
     inline void operator()();
 
     std::shared_ptr<latch_type> latch;
+
+    ~handler_type() {}  // This definition is required to avoid a bug in g++-4.8
   };
 
   static inline void do_nothing() {}
@@ -45,14 +47,15 @@ class blocking_group {
     return group_.wrap(std::forward<Function>(function));
   }
 
-  auto wrap_notify()
-      -> decltype(std::declval<blocking_group>().wrap(do_nothing)) {
+  auto wrap_notify() -> decltype(basic_completion_group<handler_type>{}.wrap(
+      do_nothing)) {
     return group_.wrap(do_nothing);
   }
 
   template <typename... Args>
-  auto save(Args&&... args) -> decltype(std::declval<blocking_group>().wrap(
-      make_store_handler(std::forward<Args>(args)...))) {
+  auto save(Args&&... args)
+      -> decltype(basic_completion_group<handler_type>{}.wrap(
+          make_store_handler(std::forward<Args>(args)...))) {
     return group_.wrap(make_store_handler(std::forward<Args>(args)...));
   }
 
@@ -87,7 +90,6 @@ blocking_group::~blocking_group() {
 
 void blocking_group::wait() {
   if (!group_.pending()) {
-    group_.set_handler({});
     auto latch = group_.handler().latch;
     group_.notify();
     latch->wait();

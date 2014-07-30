@@ -26,7 +26,9 @@ class basic_completion_group {
 
   class ref_type;
 
-  inline basic_completion_group(handler_type handler = {});
+  // NOTE: "= {}" is broken on g++4.8 see:
+  //   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=60367
+  inline basic_completion_group(handler_type handler = handler_type{});
 
   basic_completion_group(basic_completion_group&&) = default;
   basic_completion_group(const basic_completion_group&) = delete;
@@ -41,7 +43,7 @@ class basic_completion_group {
   inline void notify();
 
   inline bool pending() const;
-  inline void reset(handler_type handler = {});
+  inline void reset(handler_type handler = handler_type{});
 
   inline ref_type ref();
 
@@ -106,7 +108,7 @@ inline basic_completion_group<Handler>::basic_completion_group(
 
 template <typename Handler>
 inline void basic_completion_group<Handler>::when_done(handler_type handler) {
-  set_handler(handler);
+  set_handler(std::move(handler));
   notify();
 }
 

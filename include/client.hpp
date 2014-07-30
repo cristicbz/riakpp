@@ -34,14 +34,16 @@ class client {
  public:
   using sibling_resolver = std::function<store_resolved_sibling(riak::object&)>;
 
+  // NOTE: "= {}" is broken on g++4.8 see:
+  //   https://gcc.gnu.org/bugzilla/show_bug.cgi?id=60367
   client(const std::string& hostname, uint16_t port,
          sibling_resolver resolver = &pass_through_resolver,
-         connection_options options = {});
+         connection_options options = connection_options{});
 
   client(boost::asio::io_service& io_service,
          const std::string& hostname, uint16_t port,
          sibling_resolver resolver = &pass_through_resolver,
-         connection_options options = {});
+         connection_options options = connection_options{});
 
   client(client&& rhs) = default;
   client& operator=(client&& rhs) = default;
