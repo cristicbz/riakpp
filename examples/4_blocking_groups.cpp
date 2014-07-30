@@ -58,6 +58,7 @@ int main(int argc, char* argv[]) {
                                std::cerr << "Wohoo, I'm in another thread!\n";
                                error = ec;
                              }));
+  blocking.wait_and_reset();
   if (should_bail(error)) return 1;
   std::cout << "Stored. Refetching..." << std::endl;
 
