@@ -15,7 +15,7 @@ namespace riak {
 namespace testing {
 namespace {
 
-constexpr auto connect_timeout_ms = 500;
+constexpr auto connect_timeout_ms = 100;
 constexpr auto allow_errors = response::allow_errors_yes;
 constexpr auto no_deadline = length_framed_connection::no_deadline;
 
@@ -224,7 +224,7 @@ TEST(LengthFramedConnectionTest, ConnectionRefused) {
       auto endpoints = endpoint_vector{{ip::address_v4{{{1, 2, 3, 4}}}, 60000}};
       // This times out if we are connected to the internet.
       length_framed_connection conn{conn_service, endpoints.begin(),
-                                    endpoints.end(), 500};
+                                    endpoints.end(), connect_timeout_ms};
 
       send_and_expect(
           conn, "a", no_deadline, std::errc::connection_refused, "", [&] {

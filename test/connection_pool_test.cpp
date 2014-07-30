@@ -26,8 +26,8 @@ TEST(ConnectionPoolTest, SequencedMessages) {
       new connection_pool<length_framed_connection>{
           threads.io_service(), "localhost", server.port(), 2, 4096, 1000}};
 
-  send_and_expect(*pool, "okay1", 100, errc_success, "okay1_reply", [&] {
-  send_and_expect(*pool, "okay2", 100, errc_success, "okay2_reply", [&] {
+  send_and_expect(*pool, "okay1", 300, errc_success, "okay1_reply", [&] {
+  send_and_expect(*pool, "okay2", 300, errc_success, "okay2_reply", [&] {
   send_and_expect(*pool, "timeout1", 60, std::errc::timed_out, "");
   }); });
 
@@ -67,7 +67,7 @@ TEST(ConnectionPoolTest, ManyMessages) {
           .RetiresOnSaturation();
     }
     server.expect_eof_and_close();  // The client will close the connection.
-    std::thread server_thread{[&] { server.run(num_connections); }};
+    std::thread server_thread{[&] { server.run(num_connections, 20000); }};
 
     // Send 'okay1', 'okay2' ... from two different threads at the same time
     // and kill the connection pool when all message replies have been received.
@@ -80,14 +80,14 @@ TEST(ConnectionPoolTest, ManyMessages) {
 
     std::thread first_half{[&] {
       for (auto i = 0; i < msgs_to_send / 2; ++i) {
-        send_and_expect(*pool, "okay" + std::to_string(i), 1000, errc_success,
+        send_and_expect(*pool, "okay" + std::to_string(i), 10000, errc_success,
                         "okay" + std::to_string(i) + "_reply", stop_when_done);
       }
     }};
 
     std::thread second_half{[&] {
       for (auto i = msgs_to_send / 2; i < msgs_to_send; ++i) {
-        send_and_expect(*pool, "okay" + std::to_string(i), 1000, errc_success,
+        send_and_expect(*pool, "okay" + std::to_string(i), 10000, errc_success,
                         "okay" + std::to_string(i) + "_reply", stop_when_done);
       }
     }};
@@ -109,7 +109,9 @@ TEST(ConnectionPoolTest, ManyMessages) {
       ++i_connection;
     }
     EXPECT_LE(sqrt(variance), msgs_to_send / 100)
-        << counts_string_builder.str();
+        << "FLAKY: This test checks for the variance of a load balancer, "
+           "it is statistically possible that the test fails on a normal run. "
+           "The counts are: " << counts_string_builder.str();
   }
 }
 
