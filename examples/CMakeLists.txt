@@ -7,6 +7,7 @@ function(riakpp_example name)
   target_link_libraries(${name} riakpp)
 endfunction()
 
+riakpp_example(0_readme)
 riakpp_example(1_store)
 riakpp_example(2_store_io_service)
 riakpp_example(3_store_fetch_remove)

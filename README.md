@@ -5,17 +5,11 @@ RIAKPP
 riakpp is a C++(11) client for the [riak](http://basho.com/riak) distributed data store, built on top of the excellent [Boost.Asio](http://www.boost.org/doc/libs/1_55_0/doc/html/boost_asio.html) for TCP asynchronous I/O. However, it optionally encapsulates all boost classes so don't worry if boost isn't your cup of tea.
 
 ## Features
+riakpp is still very new and shouldn't be considered production-ready. Here's what's already implemented:
 * **PBC protocol.** Support for store, fetch and remove operations.
 * **Fully asynchronous, multi-threaded socket pool.** By default a single thread runs handlers for a maximum of 8 simultaneous requests. These values are easily customizable though.
 * **Completely cutom sibling resolution.** Iterate over siblings and optionally store resolution back automatically (with multiple attempts)
 * **Value-semantics and clear ownership rules.** We deal with lifetime in an asynchronous environment the right way, not by making everything a shared_ptr.
-
-## Not features (yet)
-riakpp is still very new and shouldn't be considered production-ready. Here's a short list of missing things that will be implemented at some point.
-
-* **Automatic Retry** Priority: high. Expect this very soon.
-* **Index Queries** Priority: high. Expect this soon-ish.
-* **HTTP protocol.** Priority: low.
 
 ## Minimal Example
 ```c++
@@ -29,7 +23,7 @@ int main() {
                         if (error) std::cerr << error.message() << ".\n";
                         client.stop_managed();  // Unblocks main thread.
                       });
-  client.run_managed();  // Block until client.managed_stop().
+  client.run_managed();  // Block until client.stop_managed().
 }
 ```
 
@@ -49,12 +43,12 @@ Then built you can build and install it with the traditional
 ```
 make && sudo make install
 ```
-We test builds on Clang 3.5 and on g++-4.8 and occasionally (when we remember) on g++-4.9.
+Builds are tested on Clang 3.5 and on g++-4.8 and occasionally on g++-4.9.
 
 ## More examples
 ### Providing your own asio::io_service
 
-If not provided with an io_service, we create one for each client and add a thread pool for handler execution. If your application uses Asio elsewhere, you probably want to provide us with your own io_service. That's easy to do:
+If you don't provide an **io\_service**, the **client** object creates and manages one (as well as a thread pool). Chances are, though, if your application uses Asio elsewhere, you probably want to provide your own **io_service** and do your own thread management. You can do this when you construct a **client**:
 
 ```c++
 #include <boost/asio/io_service.hpp>
@@ -73,9 +67,10 @@ int main() {
   io_service.run();
 }
 ```
+No additional threads are created in this method, so you need to have at least a thread running ``io_service.run()`` for anything to happen.
 
 ### Synchronous API
-We don't encourage the use of a synchronous API, since not only is it inefficient, but in a multithreaded environment it's a deadlock waiting to happen. As such we don't provide non async versions of the functions, but allow you to wrap your handler in a _blocking\_group_ and then wait for it to be called. Here's an example storing, fetching and removing an object: 
+First, you probably shouldn't use a synchronous API: not only is it inefficient, but in a multithreaded environment it's a deadlock waiting to happen. There aren't any non-async methods defined, but we provide a mechanism called a **blocking\_group**  which allows you to wrap handlers and then block until they're called. Here's an example for storing, fetching and removing an object: 
 ```c++
 #include <riakpp/blocking_group.hpp>
 #include <riakpp/client.hpp>
@@ -83,7 +78,7 @@ We don't encourage the use of a synchronous API, since not only is it inefficien
 int main() {
   riak::client client{"localhost", 8087};
 
-  blocking_group blocker;
+  riak::blocking_group blocker;
   std::error_code error;
   client.async_store("example_bucket", "example_key", "hello, world!",
                      blocker.wrap([&](std::error_code store_error) {
@@ -94,7 +89,7 @@ int main() {
   blocker.wait();
   if (error) { std::cerr << error.message() << std::endl; return 1; }
   blocker.reset();  // Reset the group to allow reuse.
-  
+
   // Wrapping a handler just to save a variable would be cumbersome, so you
   // use for convenience, you can replace
   //    blocker.wrap([&] (type1 arg1, type2 arg2, ...) {
@@ -127,31 +122,23 @@ int main() {
   return 0;
 }
 ```
+**Note:** If you are going to use this method you should try not mix it with asynchronous calls, since you may accidentally cause a deadlock by blocking in handlers and occupying all the worker threads, preventing the very callbacks you're waiting on to be called.
 
 ### Sibling Resolution
-First make sure that the bucket you're using allows siblings (i.e. in the riak config set allow_mult=1). In such a bucket, all the examples we've seen so far would have inadvertently created siblings since we were storing without fetching first. A better version of the first example would then be:
+First make sure that the bucket you're using allows siblings (i.e. in the riak config set allow_mult=1). Running any of the examples so far in such bucket would have inadvertently created siblings since we were storing without fetching first. A better version of the first example would then be:
 ```c++
 #include <riakpp/client.hpp>
 
 int main() {
   riak::client client{"localhost", 8087};
 
-  std::error_code exit_with;
-  auto should_bail = [&](std:error_code error) -> bool {
-    if (error) {
-      exit_with = error;
-      client.stop_managed();
-      return false;
-    }
-    return true;
-  };
-
   // Nested lambdas to fetch, modify and store the object.
+  std::error_code exit_with;
   client.async_fetch(
       "example_bucket", "example_key",
       [&](std::error_code fetch_error, riak::object fetched) {
-        if (error) {
-          exit_with = error;
+        if (fetch_error) {
+          exit_with = fetch_error;
           client.stop_managed();
           return;
         }
@@ -172,38 +159,36 @@ int main() {
 }
 ```
 
-This still does not deal with the problem of dealing with siblings however. To do this we should first discuss the ``riak::object`` class in a bit more detail.  If you call ``.value()`` on a fetched object with multiple siblings, the process will abort since they must first be resolved.
+This still does not deal with the problem of siblings however. To do this we should first discuss the ``riak::object`` class in a bit more detail.  If you call ``.value()`` on a fetched object with multiple siblings, the process will abort since they must first be resolved.
 
-To check if this is the case you can call the ``.in_conflict()`` method on the object which returns true when there are multiple siblings. To resolve the object, you can iterate through the siblings and resolve either with new content or with one of the siblings. For instance, to pick the sibling with the longest value:
+To check if this is the case you can call the ``.in_conflict()`` method on the object which returns true when there are multiple siblings. To resolve the object, you can iterate through the siblings and resolve the conflict either with new content or with one of the siblings. For instance, to pick the sibling with the longest value:
 ```c++
-if (object.in_conflict()) {
-  size_t max_length = 0;
-  sibling* max_length_sibling = nullptr;
-  for (auto& sibling : object.siblings()) {
-    if (sibling.value().length() > max_length) {
-      max_length = sibling.value().length;
-      max_length_sibling = &sibling;
-    }
+size_t max_length = 0;
+const riak::object::content* max_length_sibling = nullptr;
+for (auto& sibling : conflicted.siblings()) {
+  if (sibling.value().length() >= max_length) {
+    max_length = sibling.value().length();
+    max_length_sibling = &sibling;
   }
-  object.resolve_with(std::move(*max_length_sibling));
 }
+conflicted.resolve_with(*max_length_sibling);
 ```
 
-riakpp automatically checks if a fetched object is in conflict and calls a sibling resolution function before calling the fetch handler. You can pass such a function to the client on construction, we make the change to the previous code easily:
+A **client** can automatically check if a fetched object is in conflict and calls a sibling resolution function before calling the fetch handler. You can pass such a function to the client on construction. To add the previous sibling resolution function to the example:
 
 ```c++
 #include <riakpp/client.hpp>
 
 riak::store_resolved_sibling max_length_resolution(riak::object& conflicted) {
   size_t max_length = 0;
-  sibling* max_length_sibling = nullptr;
-  for (auto& sibling : object.siblings()) {
-    if (sibling.value().length() > max_length) {
-      max_length = sibling.value().length;
+  const riak::object::content* max_length_sibling = nullptr;
+  for (auto& sibling : conflicted.siblings()) {
+    if (sibling.value().length() >= max_length) {
+      max_length = sibling.value().length();
       max_length_sibling = &sibling;
     }
   }
-  object.resolve_with(std::move(*max_length_sibling));
+  conflicted.resolve_with(*max_length_sibling);
 
   // Returning yes means we want riakpp to make a store() call with the resolved
   // object before calling the fetch handler.
@@ -214,7 +199,7 @@ int main() {
   riak::client client{"localhost", 8087, &max_length_resolution};
 ...
 ```
-The rest of the code is unchanged, since the sibling resolution function is called automatically.
+The rest of the code is unchanged, since the sibling resolution function is called automatically on any fetch.
 
 ## Connection Options
 There are a number of configurable parameters for the connection that can be chosen on construction. Here's an example that sets everything that can be set:
