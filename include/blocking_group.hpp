@@ -26,6 +26,8 @@ class blocking_group {
   inline void reset();
   inline void wait_and_reset();
 
+  bool pending() const { return group_.pending(); }
+
  private:
   class latch_type;
   struct handler_type {
