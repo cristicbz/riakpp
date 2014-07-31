@@ -41,7 +41,7 @@ sudo apt-get install libboost-dev libboost-system-dev libprotobuf-dev protobuf-c
 ```
 
 ### Building and Installing
-The project must first be configured using cmake:
+The project must first be configured using cmake (specify -DBUILD_EXAMPLES=1 and/or -DBUILD_TESTS=1 if you want them built as well)
 ```
 mkdir build && cd build && cmake ..
 ```
