@@ -53,7 +53,6 @@ int main(int argc, char* argv[]) {
   // being called in a different thread, but it is provided by 'blocking'. If
   // we want better control over that handler, but still block until after it's
   // called, we can use wrap() instead of save():
-  object.value() = "hello";
   client.async_store(object, blocking.wrap([&](std::error_code ec) {
                                std::cerr << "Wohoo, I'm in another thread!\n";
                                error = ec;
