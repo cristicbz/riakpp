@@ -50,7 +50,7 @@ class client {
 
   ~client();
 
-  bool manages_io_service() const { return io_service_; }
+  bool manages_io_service() const { return static_cast<bool>(threads_); }
   inline boost::asio::io_service& io_service() const;
 
   void run_managed();
@@ -235,7 +235,6 @@ void client::fetch_wrapper(Handler& handler, std::string& bucket,
 template <class Handler>
 void client::store_wrapper(Handler& handler, std::error_code error,
                            const std::string& serialized) {
-
   pbc::RpbPutResp response;
   parse(pbc::PUT_RESP, serialized, response, error);
   handler(error);

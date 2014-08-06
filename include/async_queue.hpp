@@ -76,7 +76,7 @@ void async_queue<Element>::async_pop(HandlerConvertible&& handler) {
     elements_.pop();
     lock.unlock();
     if (should_signal) elements_full_.notify_one();
-    handler(element);
+    handler(std::move(element));
   }
 }
 
