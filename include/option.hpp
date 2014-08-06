@@ -24,7 +24,10 @@ class option {
   using value_type = Type;
   option(value_type default_value) : value_{std::move(default_value)} {}
 
-  void set(value_type new_value) { value_ = std::move(new_value); }
+  void set(value_type new_value) {
+    value_ = std::move(new_value);
+    defaulted_ = false;
+  }
 
   bool defaulted() const { return defaulted_; }
   const value_type& value() const { return value_; }
