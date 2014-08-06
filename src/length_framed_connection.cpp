@@ -9,7 +9,6 @@
 
 #include "byte_order.hpp"
 #include "check.hpp"
-#include "debug_log.hpp"
 #include "endpoint_vector.hpp"
 
 namespace riak {
@@ -131,7 +130,7 @@ void length_framed_connection::report(std::errc ec) {
                                     std::move(payload_buffer_));
   accepts_requests_.store(true);
   timer_.cancel();
-  strand_.get_io_service().post(postable_handler);
+  strand_.get_io_service().post(std::move(postable_handler));
 }
 
 inline void length_framed_connection::report(boost::system::error_code ec) {
