@@ -1,6 +1,8 @@
 #ifndef RIAKPP_ASYNC_QUEUE_HPP_
 #define RIAKPP_ASYNC_QUEUE_HPP_
 
+#include "check.hpp"
+
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -41,7 +43,10 @@ class async_queue {
 
 template <class Element>
 async_queue<Element>::async_queue(size_t max_element, size_t max_handlers)
-    : max_elements_{max_element}, max_handlers_{max_handlers}, closed_{false} {}
+    : max_elements_{max_element}, max_handlers_{max_handlers}, closed_{false} {
+  RIAKPP_CHECK_GE(max_elements_, 0);
+  RIAKPP_CHECK_GE(max_handlers_, 0);
+}
 
 template <class Element>
 template <class ...Args>

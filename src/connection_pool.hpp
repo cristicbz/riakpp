@@ -63,6 +63,8 @@ connection_pool<Connection>::connection_pool(
       request_queue_{highwatermark, max_connections},
       connection_timeout_ms_{connection_timeout_ms},
       transient_{*this} {
+  RIAKPP_CHECK_GE(max_connections, 0)
+      << "Number of connections must be non-zero.";
   connections_.reserve(max_connections);
   resolve(max_connections, std::move(hostname), port);
 }
