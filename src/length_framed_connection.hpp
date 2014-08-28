@@ -8,6 +8,7 @@
 #include <system_error>
 #include <vector>
 
+#include <boost/asio/deadline_timer.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/strand.hpp>
 
