@@ -80,14 +80,14 @@ TEST(ConnectionPoolTest, ManyMessages) {
 
     std::thread first_half{[&] {
       for (auto i = 0; i < msgs_to_send / 2; ++i) {
-        send_and_expect(*pool, "okay" + std::to_string(i), 10000, errc_success,
+        send_and_expect(*pool, "okay" + std::to_string(i), 20000, errc_success,
                         "okay" + std::to_string(i) + "_reply", stop_when_done);
       }
     }};
 
     std::thread second_half{[&] {
       for (auto i = msgs_to_send / 2; i < msgs_to_send; ++i) {
-        send_and_expect(*pool, "okay" + std::to_string(i), 10000, errc_success,
+        send_and_expect(*pool, "okay" + std::to_string(i), 20000, errc_success,
                         "okay" + std::to_string(i) + "_reply", stop_when_done);
       }
     }};
@@ -125,7 +125,7 @@ TEST(ConnectionPoolTest, ConnectionRefused) {
             threads.io_service(), "localhost", random_port(), 3, 4096, 1000}};
 
     for (size_t i_msg = 0; i_msg < msgs_to_send; ++i_msg) {
-      send_and_expect(*pool, "a", 1000, std::errc::connection_refused, "", [&] {
+      send_and_expect(*pool, "a", 5000, std::errc::connection_refused, "", [&] {
         if (--msgs_to_receive == 0) {
           pool.reset();
           threads.io_service().stop();
