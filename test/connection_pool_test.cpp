@@ -97,7 +97,7 @@ TEST(ConnectionPoolTest, ManyMessages) {
     server_thread.join();
 
     // Compute the variance of the reply counts of each connection and ensure
-    // it is less than 10% -- a fair load balancing.
+    // it is less than 20% -- a fair load balancing.
     size_t i_connection = 0;
     double variance = 0.0;
     double mean = static_cast<double>(msgs_to_send) / num_connections;
@@ -108,7 +108,7 @@ TEST(ConnectionPoolTest, ManyMessages) {
       variance += (count - mean) * (count - mean) / num_connections;
       ++i_connection;
     }
-    EXPECT_LE(sqrt(variance), msgs_to_send / 100)
+    EXPECT_LE(sqrt(variance), 2 * msgs_to_send / 100)
         << "FLAKY: This test checks for the variance of a load balancer, "
            "it is statistically possible that the test fails on a normal run. "
            "The counts are: " << counts_string_builder.str();
