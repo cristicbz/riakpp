@@ -1,26 +1,22 @@
-FROM ubuntu:13.10
+FROM ubuntu:14.04
 
 MAINTAINER Marius Cobzarenco <marius@reinfer.io>
 
-RUN apt-get update
-RUN apt-get install -y wget
-
-# Install clang-3.5
-RUN wget -O - http://llvm.org/apt/llvm-snapshot.gpg.key|sudo apt-key add -
-RUN echo "" >> /etc/apt/sources.list
-RUN echo "deb http://llvm.org/apt/saucy/ llvm-toolchain-saucy main" >> /etc/apt/sources.list
-RUN echo "deb-src http://llvm.org/apt/saucy/ llvm-toolchain-saucy main" >> /etc/apt/sources.list
-RUN apt-get update
-RUN apt-get install -y build-essential make cmake clang-3.5 git
+# Install clang
+RUN apt-get update && \
+    apt-get install -y build-essential make cmake clang git
 ENV CC clang
 ENV CXX clang++
 
 RUN mkdir /src
-
-RUN apt-get install -y build-essential cmake
 RUN apt-get install -y protobuf-compiler libprotobuf-dev libprotoc-dev
 RUN apt-get install -y libboost-dev libboost-program-options-dev libboost-system-dev
-RUN cd /src &&  git clone https://github.com/reinferio/riakpp.git
-RUN cd /src/riakpp && mkdir build && cd build && cmake .. && make -j4
+RUN cd /src && \
+    git clone https://github.com/reinferio/riakpp.git
+RUN cd /src/riakpp && \
+    mkdir build && \
+    cd build && \
+    cmake -DBUILD_TESTS=on .. && \
+    make
 
 RUN /src/riakpp/build/test/unittests
