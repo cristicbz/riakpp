@@ -1,3 +1,5 @@
+# ARCHIVED: Riak is dead, this was never feature-complete and I've not actually needed this for over a decade now
+
 RIAKPP
 ======
 
